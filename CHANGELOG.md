@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.3 — 2026-11-02 (preview)
+
+- Add figure/caption/reference indexing and local image list/export queries.
+- Bundle PDF.js to render PDF figure previews, retain original downloads, and show images inside a self-contained HTML source viewer.
+- Rename the misleading reading-copy label to TeX source viewer. Equations and tables still retain source syntax.
+- Rebuild old cached viewers and update existing attachments in place. Surface preview failures for retry.
+- Require Zotero 10 for the new graphics runtime; other application versions remain untested.
+
 ## 0.1.2 — 2026-11-02 (preview)
 
 - Establish a standalone source repository with build instructions, tests, contributor guidance, and upstream attribution.

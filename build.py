@@ -83,6 +83,7 @@ def main():
     manifest = validate_manifest()
     compiler = compiler_path()
     fflate = package("fflate", "0.8.2", "fflate")
+    pdfjs = package("pdfjs-dist", "5.4.296", "pdfjs")
     build = ROOT / "build"
     build.mkdir(exist_ok=True)
     alias = "--alias:fflate=" + str(fflate / "esm/browser.js")
@@ -95,12 +96,15 @@ def main():
         subprocess.run([str(compiler), entry, "--bundle", alias, *options], cwd=ROOT, check=True)
     shutil.copy2(build / "runtime.js", ROOT / "runtime.js")
     shutil.copy2(fflate / "LICENSE", ROOT / "FFLATE-LICENSE")
+    shutil.copy2(pdfjs / "LICENSE", ROOT / "PDFJS-LICENSE")
+    subprocess.run([str(compiler),'src/pdfPreview.ts','--bundle','--platform=browser','--format=iife','--global-name=ASHPDFPreview','--target=firefox140','--external:node:*','--log-override:empty-import-meta=silent','--alias:pdfjs-dist='+str(pdfjs),'--outfile=build/pdf-preview.js'],cwd=ROOT,check=True)
+    shutil.copy2(build/'pdf-preview.js',ROOT/'pdf-preview.js')
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
     version = manifest["version"]
     xpi = dist / f"arxiv-source-helper-{version}.xpi"
     names = ["manifest.json", "bootstrap.js", "runtime.js", "LICENSE",
-             "FFLATE-LICENSE", "THIRD_PARTY.md"]
+             "FFLATE-LICENSE", "PDFJS-LICENSE", "pdf-preview.js", "THIRD_PARTY.md"]
     with zipfile.ZipFile(xpi, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for name in names:
             info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))

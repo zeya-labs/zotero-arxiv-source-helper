@@ -5,3 +5,5 @@ The TypeScript files in `src/vendor/texSource` and `src/vendor/latexQuery` are c
 The bundle includes [fflate 0.8.2](https://github.com/101arrowz/fflate), copyright Arjun Barrett, MIT license (included as FFLATE-LICENSE). The esbuild compiler is a build tool only and is not included in the plugin.
 
 Upstream revision used for attribution: [`3694234725e8a8e1d6e43c53f0edff91c19cf2d2`](https://github.com/Asianfleet/mineru-for-zotero/tree/3694234725e8a8e1d6e43c53f0edff91c19cf2d2). The source files were obtained from the main-branch archive on 2026-11-02.
+
+PDF previews bundle [Mozilla PDF.js / pdfjs-dist 5.4.296](https://github.com/mozilla/pdf.js), under Apache-2.0; see PDFJS-LICENSE. The worker handler is run locally in the plugin scope. No remote renderer is used. Local changes to src/vendor/texSource/storage.ts additionally recognize WebP and GIF MIME types.

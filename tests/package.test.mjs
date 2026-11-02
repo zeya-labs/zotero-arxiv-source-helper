@@ -32,6 +32,8 @@ test("bootstrap passes privileged globals directly and cleans up on shutdown", a
     URLSearchParams,
     setTimeout,
     clearTimeout,
+    btoa,
+    atob,
   };
   const Zotero = {
     initializationPromise: Promise.resolve(),

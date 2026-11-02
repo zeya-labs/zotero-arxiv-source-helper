@@ -11,7 +11,8 @@ function fixture() {
     "main.tex":
       "\\documentclass{article}\n\\begin{document}\n\\input{sections/method}\n\\input{tables/ablation}\n\\end{document}",
     "sections/method.tex":
-      "\\section{Active Interaction}\nThe guide has privileged spatial information.\n",
+      "\\section{Active Interaction}\nThe guide has privileged spatial information. See \\ref{fig:overview}.\n\\begin{figure}\\includegraphics{figures/test.pdf}\\caption{System overview}\\label{fig:overview}\\end{figure}\n",
+    "figures/test.pdf": "%PDF-test-fixture",
     "tables/ablation.tex":
       "\\begin{table}\\caption{Interaction and Memory}\\label{tab:interaction_memory}\n\\begin{tabular}{lr}Full & 93.3\\\\\\end{tabular}\n\\end{table}",
   };
@@ -45,6 +46,7 @@ test("save notification → versioned source → stored attachments → section 
     requests = [],
     errors = [];
   let observer;
+  let relinks = 0;
   const parent = {
     id: 1,
     key: "ABCD1234",
@@ -86,7 +88,18 @@ test("save notification → versioned source → stored attachments → section 
           parentID: 1,
           attachmentContentType: opts.contentType,
           isRegularItem: () => false,
-          getField: (k) => (k === "title" ? opts.title : ""),
+          title: opts.title,
+          getField(k) {
+            return k === "title" ? this.title : "";
+          },
+          setField(k, value) {
+            if (k === "title") this.title = value;
+          },
+          saveTx: async () => {},
+          relinkAttachmentFile: async (p) => {
+            assert.ok((await fs.stat(p)).size > 0);
+            relinks++;
+          },
           getFilePathAsync: async () => opts.file,
         };
         attachments.push(child);
@@ -104,6 +117,11 @@ test("save notification → versioned source → stored attachments → section 
     },
     Server: { Endpoints: {} },
     getMainWindows: () => [],
+    ProgressWindow: class {
+      changeHeadline() {}
+      show() {}
+      startCloseTimer() {}
+    },
     logError: (e) => errors.push(e.message),
   };
   const IOUtils = {
@@ -137,6 +155,11 @@ test("save notification → versioned source → stored attachments → section 
     TextEncoder,
     setTimeout: (f, ms) => setTimeout(f, Math.min(ms, 5)),
     clearTimeout,
+    btoa,
+    renderPDF: async () => ({
+      dataURL: "data:image/png;base64,iVBORw==",
+      pages: 1,
+    }),
   });
   vm.runInContext(
     await fs.readFile(new URL("../build/runtime.js", import.meta.url), "utf8"),
@@ -184,6 +207,41 @@ test("save notification → versioned source → stored attachments → section 
   const search = await read({ mode: "search", q: "privileged" });
   assert.ok(search.matches.length > 0);
   assert.ok(search.matches.every((m) => m.file && m.line > 0));
+  const figures = await read({ mode: "figures" });
+  assert.ok(figures.figures.length > 0);
+  const images = await read({ mode: "images" });
+  const imagePath = images.assets.find(
+    (a) => a.mime === "application/pdf",
+  ).path;
+  const image = await read({ mode: "image", q: imagePath });
+  assert.equal(image.mime, "application/pdf");
+  assert.ok(image.dataURL.startsWith("data:application/pdf;base64,"));
+  assert.ok(image.preview.dataURL.startsWith("data:image/png;base64,"));
+  const cache = path.join(
+    root,
+    "arxiv-source-helper",
+    "tex_source",
+    "1-ABCD1234",
+  );
+  const html = await fs.readFile(path.join(cache, "_ash-reading.html"), "utf8");
+  assert.ok(html.includes("<img"));
+  assert.ok(html.includes("Download original"));
+  // Upgrading a previously generated reading copy uses cached sources and
+  // updates the existing attachment instead of duplicating it or redownloading.
+  await fs.writeFile(
+    path.join(cache, "_ash-reader-version.json"),
+    '{"version":1}',
+  );
+  attachments[0].title = "arXiv TeX 阅读版 · 2610.39446v1";
+  await Zotero.ArxivSourceHelper.fetchSelected({
+    ZoteroPane: { getSelectedItems: () => [parent] },
+  });
+  for (let i = 0; i < 200 && relinks === 0; i++)
+    await new Promise((r) => setTimeout(r, 10));
+  assert.equal(relinks, 1);
+  assert.equal(attachments.length, 2);
+  assert.equal(requests.length, 1);
+  assert.ok(attachments[0].title.includes("源码查看版"));
   observer.notify("add", "item", [2]);
   await new Promise((r) => setTimeout(r, 30));
   assert.equal(requests.length, 1);

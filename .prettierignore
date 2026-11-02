@@ -3,6 +3,8 @@ build/
 dist/
 node_modules/
 runtime.js
+pdf-preview.js
+PDFJS-LICENSE
 LICENSE
 FFLATE-LICENSE
 updates.json

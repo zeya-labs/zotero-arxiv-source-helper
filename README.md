@@ -4,7 +4,7 @@
 
 浏览器照常使用 Zotero Connector。桌面端插件会为新收录的 arXiv 文献补充源码；已有文献可以手动补充。无需模型密钥或 MinerU 密钥，源码从 arXiv 下载，不上传 PDF。
 
-**当前为预览版。** 已通过自动测试和真实 arXiv 源码解析；真实 Zotero 安装、Connector 保存、附件索引的完整流程尚未验证。兼容性声明为 Zotero 7–10，开发环境为 Windows / Zotero 10.0.7，其他版本和系统尚未实测。详见 [验证记录](docs/VALIDATION.md)。
+**当前为预览版。** 已通过自动测试和真实 arXiv 源码解析；真实 Zotero 安装、Connector 保存、附件索引的完整流程尚未验证。本版要求 Zotero 10，开发环境为 Windows / Zotero 10.0.7，其他版本和系统尚未实测。详见 [验证记录](docs/VALIDATION.md)。
 
 ## 下载与安装
 
@@ -22,12 +22,14 @@
 
 每篇文献会增加两个附件：
 
-| 附件                    | 内容                                                                      |
-| ----------------------- | ------------------------------------------------------------------------- |
-| arXiv TeX 阅读版 · IDvN | HTML 阅读副本：章节目录、表格源码、按引用顺序展开的 TeX，附源文件名和行号 |
-| arXiv 原始源码 · IDvN   | arXiv 返回的原始压缩包；可能是单个 TeX，也可能是含图片的多文件包          |
+| 附件                        | 内容                                                                                      |
+| --------------------------- | ----------------------------------------------------------------------------------------- |
+| arXiv TeX 源码查看版 · IDvN | HTML 源码副本：图片预览与原图下载、图注、章节目录、表格源码和展开的 TeX，附源文件名和行号 |
+| arXiv 原始源码 · IDvN       | arXiv 返回的原始压缩包；可能是单个 TeX，也可能是含图片的多文件包                          |
 
-阅读版保留公式和表格的 **TeX 命令**，不是排版后的数学公式或表格。原 PDF 仍适合核对图形和最终排版。
+源码查看版保留公式和表格的 **TeX 命令**，不是排版后的数学公式或表格。原 PDF 仍适合核对图形和最终排版。
+
+升级 0.1.3 后，对已下载文献再执行一次“为选中文献下载 TeX 源码”。插件会复用本地源码重建副本，并更新原来的查看附件，不另加一份。预览失败会在状态中显示，可重试。
 
 普通附件可随 Zotero 文件同步。解包后的查询缓存存于 Zotero 数据目录的 `arxiv-source-helper/tex_source/<libraryID>-<itemKey>/`，属于本机数据；换电脑后可重新下载。插件不会自动扫描整个旧文献库。
 
@@ -40,6 +42,10 @@ node query.mjs ABCD1234 headings
 node query.mjs ABCD1234 section "Active Interaction"
 node query.mjs ABCD1234 search "privileged"
 node query.mjs ABCD1234 table "tab:interaction_memory"
+node query.mjs ABCD1234 figures
+node query.mjs ABCD1234 images
+node query.mjs ABCD1234 image "figures/fig01_overview.pdf" --output overview.pdf
+node query.mjs ABCD1234 image "figures/fig01_overview.pdf" --preview --output overview.png
 node query.mjs ABCD1234 full
 ```
 
@@ -57,7 +63,7 @@ node query.mjs ABCD1234 full
 
 ## 开发与测试
 
-需要 Python 3.12+、Node 24+。构建脚本使用 Python 标准库，按系统和架构下载固定版本的 esbuild、fflate，并校验 npm 包完整性。默认测试不联网、不访问真实 Zotero 文献库。
+需要 Python 3.12+、Node 24+。构建脚本使用 Python 标准库，按系统和架构下载固定版本的 esbuild、fflate、PDF.js，并校验 npm 包完整性。默认测试不联网、不访问真实 Zotero 文献库。
 
 ```sh
 git clone https://github.com/zeya-labs/zotero-arxiv-source-helper.git
@@ -83,10 +89,10 @@ build.py            构建、打包、生成更新清单
 
 ## 已知限制
 
-自定义宏可能保留为原始命令；作者注释、未使用的命令不应当作最终正文。图形仍需结合 PDF 或源图像阅读。未支持的归档、模糊主文件和缺失源码会报告失败。当前源码查询接口不提供图像检索。
+自定义宏可能保留为原始命令；作者注释、未使用的命令不应当作最终正文。图形仍需结合 PDF 或源图像阅读。未支持的归档、模糊主文件和缺失源码会报告失败。图片列表、图注与原图现在可通过本地接口查询。PDF 图形默认预览第一页，多页内容请下载原图查看。
 
 ## 来源与许可证
 
 TeX 解析和存储组件复用自 [Asianfleet/mineru-for-zotero](https://github.com/Asianfleet/mineru-for-zotero)，本项目增加自动保存流程、版本检查、阅读副本和独立运行入口，并修正根目录引用的解析。详细来源和修改见 [THIRD_PARTY.md](THIRD_PARTY.md)。
 
-本项目为 **AGPL-3.0-or-later**，fflate 为 MIT。见 [LICENSE](LICENSE) 和 [FFLATE-LICENSE](FFLATE-LICENSE)。本项目独立维护，不代表 Zotero、arXiv 或 MinerU 官方。
+本项目为 **AGPL-3.0-or-later**，fflate 为 MIT、PDF.js 为 Apache-2.0。见 [LICENSE](LICENSE) 和 [FFLATE-LICENSE](FFLATE-LICENSE)、[PDFJS-LICENSE](PDFJS-LICENSE)。本项目独立维护，不代表 Zotero、arXiv 或 MinerU 官方。

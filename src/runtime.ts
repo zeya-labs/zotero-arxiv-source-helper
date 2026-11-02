@@ -1,10 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { resolveArxiv, prepareSource, sourceHTML, SourceQueue } from "./core";
+import {
+  resolveArxiv,
+  prepareSource,
+  prepareFiles,
+  sourceHTML,
+  indexFigures,
+  SourceQueue,
+  type ImagePreview,
+} from "./core";
+import { expandLatexSource } from "./vendor/latexQuery/parser";
+import { bytesDataURL } from "./figures";
 import manifest from "../manifest.json";
 import { createTexSourceStorage } from "./vendor/texSource/storage";
 import { createLatexQueryService } from "./vendor/latexQuery/service";
 
 declare const Zotero: any, IOUtils: any, PathUtils: any;
+declare function renderPDF(bytes: Uint8Array): Promise<ImagePreview>;
+const READER_VERSION = 2;
 const PREFIX = "extensions.arxivSourceHelper.";
 const ENDPOINT = "/arxiv-source-helper/read";
 const states = new Map<number, { status: string; message?: string }>();
@@ -57,13 +69,23 @@ async function addAttachment(
   path: string,
   title: string,
   type: string,
+  update = false,
+  aliases: string[] = [],
 ) {
   if (!alive) return;
   for (const id of item.getAttachments()) {
     const child = Zotero.Items.get(id);
-    if (child?.getField("title") === title) {
+    if (child && [title, ...aliases].includes(child.getField("title"))) {
       const existingPath = await child.getFilePathAsync();
-      if (existingPath && (await IOUtils.exists(existingPath))) return;
+      if (existingPath && (await IOUtils.exists(existingPath))) {
+        if (update || child.getField("title") !== title) {
+          await child.relinkAttachmentFile(path);
+          child.setField("title", title);
+          child.attachmentSyncState = "to_upload";
+          await child.saveTx();
+        }
+        return;
+      }
     }
   }
   await Zotero.Attachments.importFromFile({
@@ -123,20 +145,63 @@ async function fetchItem(itemID: number) {
     if (!alive) return;
     const dir = store.getDir(item.libraryID, item.key);
     await IOUtils.write(PathUtils.join(dir, "_ash-original-source.bin"), bytes);
-    await IOUtils.writeUTF8(
-      PathUtils.join(dir, "_ash-reading.html"),
-      sourceHTML(item.getDisplayTitle(), id, result),
-    );
     ready = manifest;
   }
   const dir = store.getDir(item.libraryID, item.key);
+  let readerVersion = 0;
+  try {
+    readerVersion = JSON.parse(
+      await IOUtils.readUTF8(PathUtils.join(dir, "_ash-reader-version.json")),
+    ).version;
+  } catch {
+    /* initial or interrupted build */
+  }
+  let rebuilt = false;
+  let previewErrorCount = 0;
+  if (readerVersion !== READER_VERSION) {
+    const files = [];
+    for (const path of ready.files)
+      files.push({
+        path,
+        bytes: await IOUtils.read(PathUtils.join(dir, ...path.split("/"))),
+      });
+    const result = prepareFiles(files, ready.mainFile),
+      previews: Record<string, ImagePreview> = {};
+    for (const asset of result.assets)
+      if (asset.mime === "application/pdf") {
+        states.set(itemID, {
+          status: "rendering_figures",
+          message: asset.path,
+        });
+        try {
+          previews[asset.path] = await renderPDF(
+            files.find((f) => f.path === asset.path)!.bytes,
+          );
+        } catch (e) {
+          previews[asset.path] = { error: errorCode(e) };
+          previewErrorCount++;
+        }
+        if (!alive) return;
+      }
+    await IOUtils.writeUTF8(
+      PathUtils.join(dir, "_ash-reading.html"),
+      sourceHTML(item.getDisplayTitle(), id, result, previews),
+    );
+    await IOUtils.writeUTF8(
+      PathUtils.join(dir, "_ash-figure-previews.json"),
+      JSON.stringify(previews),
+    );
+    rebuilt = true;
+  }
   // Cache and attachments are separate: a partial attachment import can be retried without another download.
   if (await IOUtils.exists(PathUtils.join(dir, "_ash-reading.html")))
     await addAttachment(
       item,
       PathUtils.join(dir, "_ash-reading.html"),
-      "arXiv TeX 阅读版 · " + id,
+      "arXiv TeX 源码查看版 · " + id,
       "text/html",
+      rebuilt,
+      ["arXiv TeX 阅读版 · " + id],
     );
   if (await IOUtils.exists(PathUtils.join(dir, "_ash-original-source.bin"))) {
     const bytes = await IOUtils.read(
@@ -157,7 +222,21 @@ async function fetchItem(itemID: number) {
     );
   }
   seen.set(itemID, id);
-  states.set(itemID, { status: "ready" });
+  await IOUtils.writeUTF8(
+    PathUtils.join(dir, "_ash-reader-version.json"),
+    JSON.stringify({ version: previewErrorCount ? 0 : READER_VERSION }),
+  );
+  states.set(
+    itemID,
+    previewErrorCount
+      ? {
+          status: "ready_with_preview_errors",
+          message:
+            previewErrorCount +
+            " PDF preview(s) unavailable; select the item and retry.",
+        }
+      : { status: "ready" },
+  );
 }
 
 function enqueue(ids: number[]) {
@@ -306,7 +385,50 @@ function registerEndpoint() {
           };
         else if (q.mode === "table")
           result = await service.table({ ...ref, query: q.q || "" });
-        else
+        else if (q.mode === "figures" || q.mode === "images") {
+          const source = await store.read(ref),
+            index = indexFigures(
+              expandLatexSource(source.files, source.mainFile),
+              source.manifest.files,
+            );
+          result =
+            q.mode === "images"
+              ? { assets: index.assets }
+              : {
+                  figures: index.figures.filter(
+                    (f) =>
+                      !q.q ||
+                      [
+                        f.label,
+                        f.caption,
+                        ...f.images.map((i) => i.path || i.requested),
+                      ].some((text) =>
+                        text.toLowerCase().includes(q.q.toLowerCase()),
+                      ),
+                  ),
+                };
+        } else if (q.mode === "image") {
+          const image = await store.readImage(ref, q.q || "");
+          let preview;
+          try {
+            preview = JSON.parse(
+              await IOUtils.readUTF8(
+                PathUtils.join(
+                  store.getDir(ref.libraryID, ref.key),
+                  "_ash-figure-previews.json",
+                ),
+              ),
+            )[image.path];
+          } catch {
+            /* older cache */
+          }
+          result = {
+            path: image.path,
+            mime: image.mime,
+            dataURL: bytesDataURL(image.bytes, image.mime),
+            preview,
+          };
+        } else
           result = await service.read({
             ...ref,
             granularity: q.mode || "headings",

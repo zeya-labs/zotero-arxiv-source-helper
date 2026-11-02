@@ -174,6 +174,8 @@ function imageMime(path: string): string {
   if (extension === "pdf") return "application/pdf";
   if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
   if (extension === "svg") return "image/svg+xml";
+  if (extension === "webp") return "image/webp";
+  if (extension === "gif") return "image/gif";
   if (extension === "eps") return "application/postscript";
   return "image/png";
 }

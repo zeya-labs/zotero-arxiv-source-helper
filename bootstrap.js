@@ -19,6 +19,45 @@ async function startup({ rootURI }) {
     URLSearchParams,
     setTimeout,
     clearTimeout,
+    btoa,
+    atob,
+  };
+  helperContext.renderPDF = async function (bytes) {
+    const win = Zotero.getMainWindow();
+    if (!helperContext.ASHPDFPreview) {
+      for (const name of [
+        "DOMMatrix",
+        "Path2D",
+        "ImageData",
+        "DOMException",
+        "AbortController",
+        "AbortSignal",
+        "URL",
+        "ReadableStream",
+        "TransformStream",
+        "Blob",
+      ])
+        helperContext[name] = win[name];
+      helperContext.structuredClone = win.structuredClone.bind(win);
+      helperContext.console = win.console;
+      Services.scriptloader.loadSubScript(
+        rootURI + "pdf-preview.js",
+        helperContext,
+      );
+    }
+    return helperContext.ASHPDFPreview.renderPDF(
+      bytes,
+      (width, height) => {
+        const canvas = win.document.createElementNS(
+          "http://www.w3.org/1999/xhtml",
+          "canvas",
+        );
+        canvas.width = width;
+        canvas.height = height;
+        return canvas;
+      },
+      win.document,
+    );
   };
   Services.scriptloader.loadSubScript(rootURI + "runtime.js", helperContext);
   await helperContext.ArxivSourceHelperRuntime.default.startup();
