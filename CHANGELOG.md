@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4 — 2026-11-02 (preview)
+
+- Replace the separated figure/table source view with original PDF pages rendered as PNGs in a self-contained HTML reading copy.
+- Preserve original paragraph, figure, table and equation placement; add page-list and page-PNG export queries while retaining TeX retrieval.
+- Prefer the matching local PDF attachment and reuse cached source/PDF data when rebuilding existing copies.
+- Load the PDF renderer during startup instead of reopening its package lazily during a download.
+- Replace the detached native progress window with an in-document notice anchored to the Zotero viewport, avoiding mixed screen/DPI coordinates.
+
 ## 0.1.3 — 2026-11-02 (preview)
 
 - Add figure/caption/reference indexing and local image list/export queries.

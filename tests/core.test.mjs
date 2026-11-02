@@ -1,12 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { gzipSync } from "node:zlib";
-import {
-  resolveArxiv,
-  prepareSource,
-  sourceHTML,
-  SourceQueue,
-} from "../build/core.mjs";
+import { resolveArxiv, prepareSource, SourceQueue } from "../build/core.mjs";
 
 function tar(files) {
   const result = [];
@@ -74,9 +69,6 @@ test("expands multifile source and preserves equations, tables and file position
   assert.ok(
     result.tables.every((t) => t.file === "parts/model.tex" && t.lineStart > 0),
   );
-  const html = sourceHTML("<script>bad</script>", "2610.39446v1", result);
-  assert.ok(!html.includes("<script>bad"));
-  assert.ok(html.includes("&lt;script&gt;"));
 });
 test("supports gzip single-file source", async () => {
   assert.equal(

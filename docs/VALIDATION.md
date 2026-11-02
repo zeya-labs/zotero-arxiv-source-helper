@@ -1,6 +1,6 @@
 # Validation status
 
-Last checked: 2026-11-02. Current release: **0.1.3 preview**.
+Last checked: 2026-11-02. Current release: **0.1.4 preview**.
 
 ## Verified
 
@@ -24,3 +24,9 @@ The declared compatibility range is not a claim that each listed version has bee
 ## Figure preview validation
 
 The actual bundled PDF.js renderer was run in a separate headless Edge browser against all 14 PDF figure assets in Ask to Evolve. All 14 rendered. The HTML viewer was opened in that browser and its framework figure, caption, source location, and original-download link were visually inspected. A contact sheet of all generated figures was also inspected. These browser checks do not replace testing in Zotero itself. Synthetic tests cover figure indexing, escaped markup, image export, cache migration, and in-place attachment updates.
+
+## 0.1.4 page and notice checks
+
+The bundled renderer converted the complete 29-page Ask to Evolve PDF into PNG pages and a self-contained 18,102,223-byte HTML file in an isolated headless Edge browser. Pages 1, 5 and 11 were captured from the HTML; the method figure and main results table were visually checked in their original page context. The viewer contains all 29 ordered page images and no separate figure/table galleries.
+
+The new in-document notice was checked at 1000×700 / DPR 1 and 2194×1194 / DPR 1.75. In both cases it remained 20 CSS pixels from the right and bottom viewport edges, retained keyboard focus, merged repeated notices, and closed automatically. This is browser verification of the shared DOM/CSS behavior; Zotero window integration still needs user confirmation.

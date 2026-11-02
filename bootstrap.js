@@ -22,29 +22,29 @@ async function startup({ rootURI }) {
     btoa,
     atob,
   };
-  helperContext.renderPDF = async function (bytes) {
-    const win = Zotero.getMainWindow();
-    if (!helperContext.ASHPDFPreview) {
-      for (const name of [
-        "DOMMatrix",
-        "Path2D",
-        "ImageData",
-        "DOMException",
-        "AbortController",
-        "AbortSignal",
-        "URL",
-        "ReadableStream",
-        "TransformStream",
-        "Blob",
-      ])
-        helperContext[name] = win[name];
-      helperContext.structuredClone = win.structuredClone.bind(win);
-      helperContext.console = win.console;
-      Services.scriptloader.loadSubScript(
-        rootURI + "pdf-preview.js",
-        helperContext,
-      );
-    }
+  const win = Zotero.getMainWindow();
+  for (const name of [
+    "DOMMatrix",
+    "Path2D",
+    "ImageData",
+    "DOMException",
+    "AbortController",
+    "AbortSignal",
+    "URL",
+    "ReadableStream",
+    "TransformStream",
+    "Blob",
+  ])
+    helperContext[name] = win[name];
+  helperContext.structuredClone = win.structuredClone.bind(win);
+  helperContext.console = win.console;
+  Services.scriptloader.loadSubScript(
+    rootURI + "pdf-preview.js",
+    helperContext,
+  );
+  // Load while the install root is available, rather than reopening the XPI
+  // later from a background download callback.
+  helperContext.renderPaperPDF = async function (bytes, onProgress) {
     return helperContext.ASHPDFPreview.renderPDF(
       bytes,
       (width, height) => {
@@ -57,6 +57,8 @@ async function startup({ rootURI }) {
         return canvas;
       },
       win.document,
+      true,
+      onProgress,
     );
   };
   Services.scriptloader.loadSubScript(rootURI + "runtime.js", helperContext);

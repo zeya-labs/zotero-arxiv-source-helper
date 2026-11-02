@@ -24,6 +24,7 @@ test("manifest supplies Zotero mandatory fields including the update URL", async
 test("bootstrap passes privileged globals directly and cleans up on shutdown", async () => {
   let started = 0,
     stopped = 0;
+  const loaded = [];
   const globals = {
     IOUtils: {},
     PathUtils: {},
@@ -38,23 +39,33 @@ test("bootstrap passes privileged globals directly and cleans up on shutdown", a
   const Zotero = {
     initializationPromise: Promise.resolve(),
     uiReadyPromise: Promise.resolve(),
+    getMainWindow: () => ({ structuredClone, console, document: {} }),
   };
   const Services = {
     scriptloader: {
       loadSubScript(url, context) {
-        assert.equal(url, "jar:file:///test.xpi!/runtime.js");
+        loaded.push(url);
+        assert.ok(
+          [
+            "jar:file:///test.xpi!/runtime.js",
+            "jar:file:///test.xpi!/pdf-preview.js",
+          ].includes(url),
+        );
         for (const [name, value] of Object.entries(globals))
           assert.equal(context[name], value);
-        context.ArxivSourceHelperRuntime = {
-          default: {
-            startup: async () => {
-              started++;
+        if (url.endsWith("pdf-preview.js"))
+          context.ASHPDFPreview = { renderPDF: async () => [] };
+        else
+          context.ArxivSourceHelperRuntime = {
+            default: {
+              startup: async () => {
+                started++;
+              },
+              shutdown: async () => {
+                stopped++;
+              },
             },
-            shutdown: async () => {
-              stopped++;
-            },
-          },
-        };
+          };
       },
     },
   };
@@ -70,6 +81,10 @@ test("bootstrap passes privileged globals directly and cleans up on shutdown", a
   );
   await context.startup({ rootURI: "jar:file:///test.xpi!/" });
   assert.equal(started, 1);
+  assert.deepEqual(loaded, [
+    "jar:file:///test.xpi!/pdf-preview.js",
+    "jar:file:///test.xpi!/runtime.js",
+  ]);
   await context.shutdown();
   assert.equal(stopped, 1);
 });

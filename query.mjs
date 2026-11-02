@@ -19,7 +19,7 @@ const [key, mode = "headings", query = "", port = "23119", libraryID = "1"] =
   args;
 if (!key) {
   console.error(
-    "Usage: node query.mjs ITEM_KEY [headings|section|search|table|figures|images|image|full|status] [query] [port] [libraryID] [--output FILE] [--preview]",
+    "Usage: node query.mjs ITEM_KEY [headings|section|search|table|figures|images|image|pages|page|full|status] [query] [port] [libraryID] [--output FILE] [--preview]",
   );
   process.exit(2);
 }
@@ -35,9 +35,10 @@ url.search = new URLSearchParams({
 try {
   const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
   const result = await response.json();
-  if (mode === "image" && response.ok) {
+  if (["image", "page"].includes(mode) && response.ok) {
     if (output) {
-      const data = preview ? result.preview?.dataURL : result.dataURL;
+      const data =
+        preview && mode === "image" ? result.preview?.dataURL : result.dataURL;
       if (!data)
         throw Error(
           "Preview unavailable; omit --preview to save the original.",

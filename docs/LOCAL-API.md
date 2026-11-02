@@ -12,7 +12,7 @@ Use `query.mjs` for ordinary access. Zotero may drop requests that look like bro
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `libraryID` | Zotero library ID; defaults to the personal library                                                                              |
 | `key`       | Eight-character parent item key                                                                                                  |
-| `mode`      | `headings` (default), `section`, `search`, `table`, `figures`, `images`, `image`, `full`, `status`                               |
+| `mode`      | `headings` (default), `section`, `search`, `table`, `figures`, `images`, `image`, `pages`, `page`, `full`, `status`              |
 | `section`   | Exact full heading path separated by `/`, or a unique leaf heading title                                                         |
 | `q`         | Keyword for `search`, caption/label/content substring for `table`, filter for `figures`, or exact relative file path for `image` |
 
@@ -28,4 +28,8 @@ The source cache lives under Zotero's data directory. External clients should qu
 
 `mode=figures` returns figure labels, captions (plain and original TeX), referenced image paths, and source locations. `number` is source order, not the final publication figure number. `mode=images` lists the available assets and associated figure IDs.
 
-`mode=image&q=figures/example.pdf` returns its MIME type and original bytes as a data URL, plus a cached PNG preview for supported PDFs. The CLI suppresses base64 output: use `--output FILE` to save the original, or add `--preview` to save its PNG preview. Existing output files are never overwritten. PDF previews show the first page; originals retain all pages.
+`mode=image&q=figures/example.pdf` returns its MIME type and original bytes as a data URL, plus a legacy PNG preview when one was previously cached. The CLI suppresses base64 output: use `--output FILE` to save the original, or add `--preview` to save its PNG preview. Existing output files are never overwritten. PDF previews show the first page; originals retain all pages.
+
+## Full paper pages
+
+`mode=pages` returns the generated paper-page manifest. `mode=page&q=5` returns page 5 as a PNG data URL. The CLI can save it with `node query.mjs ABCD1234 page 5 --output page-5.png`. These are complete original PDF pages, so figures and tables stay in their original text context. New reading copies no longer generate isolated figure previews; use page exports for PNG viewing, or `image` for the original source asset.

@@ -47,6 +47,7 @@ test("save notification → versioned source → stored attachments → section 
     errors = [];
   let observer;
   let relinks = 0;
+  const renderedInputs = [];
   const parent = {
     id: 1,
     key: "ABCD1234",
@@ -76,7 +77,11 @@ test("save notification → versioned source → stored attachments → section 
     HTTP: {
       request: async (method, url) => {
         requests.push(url);
-        return { response: archive.buffer };
+        return {
+          response: url.includes("/pdf/")
+            ? new TextEncoder().encode("%PDF-fixture").buffer
+            : archive.buffer,
+        };
       },
     },
     Attachments: {
@@ -156,10 +161,19 @@ test("save notification → versioned source → stored attachments → section 
     setTimeout: (f, ms) => setTimeout(f, Math.min(ms, 5)),
     clearTimeout,
     btoa,
-    renderPDF: async () => ({
-      dataURL: "data:image/png;base64,iVBORw==",
-      pages: 1,
-    }),
+    atob,
+    renderPaperPDF: async (bytes) => {
+      renderedInputs.push(new TextDecoder().decode(bytes));
+      return [
+        {
+          number: 1,
+          width: 1200,
+          height: 1600,
+          dataURL: "data:image/png;base64,iVBORw==",
+          pages: 1,
+        },
+      ];
+    },
   });
   vm.runInContext(
     await fs.readFile(new URL("../build/runtime.js", import.meta.url), "utf8"),
@@ -179,7 +193,7 @@ test("save notification → versioned source → stored attachments → section 
     await new Promise((r) => setTimeout(r, 10));
   assert.deepEqual(errors, []);
   assert.equal(Zotero.ArxivSourceHelper.getStatus()[0]?.[1].status, "ready");
-  assert.equal(requests.length, 1);
+  assert.equal(requests.length, 2);
   assert.equal(requests[0], "https://arxiv.org/src/2610.39446v1");
   assert.equal(attachments.length, 2);
   const endpoint = new Zotero.Server.Endpoints["/arxiv-source-helper/read"]();
@@ -216,7 +230,11 @@ test("save notification → versioned source → stored attachments → section 
   const image = await read({ mode: "image", q: imagePath });
   assert.equal(image.mime, "application/pdf");
   assert.ok(image.dataURL.startsWith("data:application/pdf;base64,"));
-  assert.ok(image.preview.dataURL.startsWith("data:image/png;base64,"));
+  const pages = await read({ mode: "pages" });
+  assert.equal(pages.pages.length, 1);
+  const page = await read({ mode: "page", q: "1" });
+  assert.equal(page.mime, "image/png");
+  assert.ok(page.dataURL.startsWith("data:image/png;base64,"));
   const cache = path.join(
     root,
     "arxiv-source-helper",
@@ -225,7 +243,8 @@ test("save notification → versioned source → stored attachments → section 
   );
   const html = await fs.readFile(path.join(cache, "_ash-reading.html"), "utf8");
   assert.ok(html.includes("<img"));
-  assert.ok(html.includes("Download original"));
+  assert.ok(html.includes("paper-page"));
+  assert.ok(!html.includes("Download original"));
   // Upgrading a previously generated reading copy uses cached sources and
   // updates the existing attachment instead of duplicating it or redownloading.
   await fs.writeFile(
@@ -233,19 +252,34 @@ test("save notification → versioned source → stored attachments → section 
     '{"version":1}',
   );
   attachments[0].title = "arXiv TeX 阅读版 · 2610.39446v1";
+  await fs.unlink(path.join(cache, "_ash-paper.pdf"));
+  const localPDF = path.join(root, "original.pdf");
+  await fs.writeFile(localPDF, "%PDF-local");
+  const originalAttachment = {
+    id: 99,
+    parentID: 1,
+    attachmentContentType: "application/pdf",
+    isRegularItem: () => false,
+    getField: (k) =>
+      k === "url" ? "https://arxiv.org/pdf/2610.39446v1" : "Preprint PDF",
+    getFilePathAsync: async () => localPDF,
+  };
+  attachments.push(originalAttachment);
+  items.set(99, originalAttachment);
   await Zotero.ArxivSourceHelper.fetchSelected({
     ZoteroPane: { getSelectedItems: () => [parent] },
   });
   for (let i = 0; i < 200 && relinks === 0; i++)
     await new Promise((r) => setTimeout(r, 10));
   assert.equal(relinks, 1);
-  assert.equal(attachments.length, 2);
-  assert.equal(requests.length, 1);
-  assert.ok(attachments[0].title.includes("源码查看版"));
+  assert.equal(attachments.length, 3);
+  assert.equal(renderedInputs.at(-1), "%PDF-local");
+  assert.equal(requests.length, 2);
+  assert.ok(attachments[0].title.includes("PDF 逐页阅读版"));
   observer.notify("add", "item", [2]);
   await new Promise((r) => setTimeout(r, 30));
-  assert.equal(requests.length, 1);
-  assert.equal(attachments.length, 2);
+  assert.equal(requests.length, 2);
+  assert.equal(attachments.length, 3);
   await context.ArxivSourceHelperRuntime.default.shutdown();
   assert.equal(observer, null);
   assert.equal(Zotero.Server.Endpoints["/arxiv-source-helper/read"], undefined);

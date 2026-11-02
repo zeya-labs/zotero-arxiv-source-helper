@@ -9,6 +9,8 @@ export async function renderPDF(
   bytes: Uint8Array,
   createCanvas: (width: number, height: number) => any,
   ownerDocument: any,
+  allPages = false,
+  onProgress?: (page: number, total: number) => void,
 ) {
   class CanvasFactory {
     create(width: number, height: number) {
@@ -41,26 +43,37 @@ export async function renderPDF(
   });
   try {
     const pdf = await task.promise,
-      page = await pdf.getPage(1),
-      base = page.getViewport({ scale: 1 });
-    const viewport = page.getViewport({
-      scale: Math.min(2, 1400 / base.width, 1800 / base.height),
-    });
-    const canvas = createCanvas(
-      Math.ceil(viewport.width),
-      Math.ceil(viewport.height),
-    );
-    await page.render({
-      canvas,
-      canvasContext: canvas.getContext("2d"),
-      viewport,
-    }).promise;
-    return {
-      dataURL: canvas.toDataURL("image/png"),
-      pages: pdf.numPages,
-      width: canvas.width,
-      height: canvas.height,
-    };
+      pages = [];
+    if (allPages && pdf.numPages > 100)
+      throw Error("paper-exceeds-100-page-limit");
+    for (let number = 1; number <= (allPages ? pdf.numPages : 1); number++) {
+      const page = await pdf.getPage(number),
+        base = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({
+        scale: Math.min(2, 1400 / base.width, 1800 / base.height),
+      });
+      const canvas = createCanvas(
+        Math.ceil(viewport.width),
+        Math.ceil(viewport.height),
+      );
+      await page.render({
+        canvas,
+        canvasContext: canvas.getContext("2d"),
+        viewport,
+      }).promise;
+      const result = {
+        number,
+        dataURL: canvas.toDataURL("image/png"),
+        pages: pdf.numPages,
+        width: canvas.width,
+        height: canvas.height,
+      };
+      pages.push(result);
+      page.cleanup();
+      canvas.width = canvas.height = 0;
+      onProgress?.(number, pdf.numPages);
+    }
+    return allPages ? pages : pages[0];
   } finally {
     await task.destroy();
   }

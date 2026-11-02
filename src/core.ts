@@ -6,7 +6,7 @@ import {
   parseLatexHeadings,
   extractLatexTables,
 } from "./vendor/latexQuery/parser";
-import { indexFigures, bytesDataURL, imageMime } from "./figures";
+import { indexFigures } from "./figures";
 export { indexFigures } from "./figures";
 export interface ImagePreview {
   dataURL?: string;
@@ -77,134 +77,62 @@ function esc(text: string): string {
       ]!,
   );
 }
-
-export function sourceHTML(
+export interface PaperPage {
+  number: number;
+  width: number;
+  height: number;
+  dataURL: string;
+}
+/** A faithful page facsimile: figures, tables, equations and text keep PDF positions. */
+export function paperHTML(
   title: string,
   arxivID: string,
-  result: Awaited<ReturnType<typeof prepareSource>>,
-  previews: Record<string, ImagePreview> = {},
+  pages: PaperPage[],
 ): string {
-  const byPath = new Map(result.files.map((f) => [f.path, f.bytes]));
-  function figureImage(path: string) {
-    const bytes = byPath.get(path);
-    if (!bytes) return "<p>Missing image: " + esc(path) + "</p>";
-    const mime = imageMime(path),
-      original = bytesDataURL(bytes, mime);
-    const preview = mime.startsWith("image/")
-      ? original
-      : previews[path]?.dataURL;
-    return (
-      '<div class="figure-image">' +
-      (preview
-        ? '<img loading="lazy" alt="' + esc(path) + '" src="' + preview + '">'
-        : '<p class="notice">Preview unavailable. Download the original figure below.</p>') +
-      '<p><a download="' +
-      esc(path.split("/").pop()!) +
-      '" href="' +
-      original +
-      '">Download original / 下载原图</a> · ' +
-      esc(path) +
-      (previews[path]?.pages && previews[path].pages! > 1
-        ? " · preview: page 1 of " + previews[path].pages
-        : "") +
-      "</p></div>"
-    );
-  }
-  const figureHTML = result.figures
-    .map(
-      (f) =>
-        '<figure id="' +
-        f.id +
-        '"><h3>Source figure / 图源 ' +
-        f.number +
-        (f.label ? " · " + esc(f.label) : "") +
-        "</h3>" +
-        f.images
-          .map((i) =>
-            i.path
-              ? figureImage(i.path)
-              : '<p class="notice">Missing image: ' + esc(i.requested) + "</p>",
-          )
-          .join("") +
-        "<figcaption>" +
-        esc(f.caption) +
-        '</figcaption><p class="location">' +
-        esc(f.file) +
-        ":" +
-        f.line +
-        (f.references.length
-          ? " · cited in " +
-            f.references.map((r) => esc(r.file) + ":" + r.line).join(", ")
-          : "") +
-        "</p><details><summary>Original caption / 原始图注</summary><pre>" +
-        esc(f.captionTex) +
-        "</pre></details></figure>",
+  if (!pages.length) throw Error("paper-has-no-pages");
+  for (const [index, page] of pages.entries())
+    if (
+      page.number !== index + 1 ||
+      !/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(page.dataURL)
     )
-    .join("");
+      throw Error("invalid-page-preview");
   return (
-    '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>' +
+    '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' +
     esc(title) +
-    "</title>" +
-    "<style>body{max-width:1100px;margin:40px auto;padding:0 24px;font:17px/1.65 system-ui;color:#222}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.6 monospace;padding:16px;background:#f6f7f9}h1{font-size:26px}summary{cursor:pointer}a{color:#1769aa}figure{margin:30px 0;padding:22px;border:1px solid #dfe4e8;border-radius:12px}figure img{max-width:100%;height:auto;display:block;margin:auto}.location,.figure-image p{font-size:13px;color:#59636c}.notice{padding:12px;background:#fff5df}nav{padding:12px;background:#f1f6f9}figcaption{margin-top:14px}</style></head><body><h1>" +
+    "</title><style>body{margin:0;background:#edf0f3;color:#252c34;font:14px/1.5 system-ui,sans-serif}header{background:white;padding:18px 24px;border-bottom:1px solid #dbe0e5}h1{font-size:20px;margin:0 0 6px}p{margin:6px 0}nav{display:flex;gap:10px;flex-wrap:wrap;max-width:1100px;margin:12px auto;padding:0 12px}a{color:#1769aa}main{max-width:1100px;margin:auto;padding:0 12px 30px}.paper-page{margin:16px 0;scroll-margin-top:16px}.paper-page img{display:block;width:100%;height:auto;background:white;border:1px solid #d8dde3;box-shadow:0 2px 9px #0001;box-sizing:border-box}.paper-page figcaption{text-align:center;color:#65717e;padding:7px}header .hint{font-size:12px;color:#65717e}</style></head><body><header><h1>" +
     esc(title) +
-    "</h1>" +
-    "<p>arXiv " +
+    "</h1><p>PDF 逐页阅读版 · arXiv " +
     esc(arxivID) +
-    ' · TeX source viewer / TeX 源码查看版</p><p>Figures are previewed below with their captions and original downloads. Formulas and tables retain TeX source; this is not a typeset paper.</p><nav><a href="#figures">Figures / 图片</a> · <a href="#tables">Tables / 表格</a> · <a href="#source">Source / 正文源码</a></nav>' +
-    "<h2>Contents / 章节</h2><ol>" +
-    result.headings
+    " · " +
+    pages.length +
+    ' 页</p><p class="hint">以下为原始 PDF 的逐页 PNG，正文、图片、表格和公式保留在原位。文字检索与复制请使用原 PDF 或 TeX 查询。</p></header><nav aria-label="页码">' +
+    pages
+      .map((p) => '<a href="#page-' + p.number + '">' + p.number + "</a>")
+      .join("") +
+    "</nav><main>" +
+    pages
       .map(
-        (h) =>
-          "<li>" +
-          esc(h.path.join(" / ")) +
-          " — " +
-          esc(h.file) +
-          ":" +
-          h.line +
-          "</li>",
+        (p) =>
+          '<figure class="paper-page" id="page-' +
+          p.number +
+          '"><img loading="' +
+          (p.number === 1 ? "eager" : "lazy") +
+          '" width="' +
+          p.width +
+          '" height="' +
+          p.height +
+          '" alt="第 ' +
+          p.number +
+          ' 页" src="' +
+          p.dataURL +
+          '"><figcaption>第 ' +
+          p.number +
+          " / " +
+          pages.length +
+          " 页</figcaption></figure>",
       )
       .join("") +
-    "</ol>" +
-    '<h2 id="figures">Figures / 图片与图注</h2>' +
-    figureHTML +
-    (result.assets.some((a) => !a.figureIds.length)
-      ? "<details><summary>Other image assets / 其他图像文件</summary>" +
-        result.assets
-          .filter((a) => !a.figureIds.length)
-          .map((a) => figureImage(a.path))
-          .join("") +
-        "</details>"
-      : "") +
-    '<h2 id="tables">Tables / 表格源码</h2>' +
-    result.tables
-      .filter((t) => /^table\*?$|longtable/.test(t.environment))
-      .map(
-        (t) =>
-          "<details><summary>" +
-          esc(t.caption || t.label || t.environment) +
-          " — " +
-          esc(t.file) +
-          ":" +
-          t.lineStart +
-          "</summary><pre>" +
-          esc(t.content) +
-          "</pre></details>",
-      )
-      .join("") +
-    '<h2 id="source">Full source / 展开正文</h2>' +
-    result.segments
-      .map(
-        (s) =>
-          "<p><strong>" +
-          esc(s.file) +
-          ":" +
-          s.lineStart +
-          "</strong></p><pre>" +
-          esc(s.text) +
-          "</pre>",
-      )
-      .join("") +
-    "</body></html>"
+    "</main></body></html>"
   );
 }
 

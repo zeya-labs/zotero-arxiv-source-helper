@@ -13,6 +13,20 @@ test("image client saves original/preview without logging base64 or overwriting 
   );
   const server = createServer((req, res) => {
     res.setHeader("Content-Type", "application/json");
+    if (
+      new URL(req.url, "http://localhost").searchParams.get("mode") === "page"
+    ) {
+      res.end(
+        JSON.stringify({
+          path: "page-0001.png",
+          mime: "image/png",
+          dataURL:
+            "data:image/png;base64," +
+            Buffer.from("page-fixture").toString("base64"),
+        }),
+      );
+      return;
+    }
     res.end(
       JSON.stringify({
         path: "figures/a.pdf",
@@ -30,11 +44,19 @@ test("image client saves original/preview without logging base64 or overwriting 
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = String(server.address().port);
-  async function run(extra = []) {
+  async function run(extra = [], mode = "image") {
     return new Promise((resolve, reject) => {
       const child = spawn(
         process.execPath,
-        [script, "ABCD1234", "image", "figures/a.pdf", port, "1", ...extra],
+        [
+          script,
+          "ABCD1234",
+          mode,
+          mode === "page" ? "1" : "figures/a.pdf",
+          port,
+          "1",
+          ...extra,
+        ],
         { cwd: dir, windowsHide: true },
       );
       let stdout = "",
@@ -65,6 +87,12 @@ test("image client saves original/preview without logging base64 or overwriting 
     const collision = await run(["--output", "original.pdf"]);
     assert.equal(collision.code, 2);
     assert.ok(collision.stderr.includes("EEXIST"));
+    const page = await run(["--output", "page.png"], "page");
+    assert.equal(page.code, 0);
+    assert.equal(
+      await fs.readFile(path.join(dir, "page.png"), "utf8"),
+      "page-fixture",
+    );
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

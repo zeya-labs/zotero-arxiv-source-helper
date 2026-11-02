@@ -1,6 +1,6 @@
 # arXiv Source Helper for Zotero
 
-保存论文时保留 TeX 源码，让 AI 按章节、关键词和表格读取原文，并定位到源文件和行号。
+保存论文时保留 TeX 源码供 AI 检索，并将原始 PDF 逐页转成 PNG 嵌入 HTML，保持正文、图片、表格和公式的原始位置。
 
 浏览器照常使用 Zotero Connector。桌面端插件会为新收录的 arXiv 文献补充源码；已有文献可以手动补充。无需模型密钥或 MinerU 密钥，源码从 arXiv 下载，不上传 PDF。
 
@@ -18,18 +18,18 @@
 
 **新文献：** 在 arXiv 页面点击 Zotero Connector 保存，桌面插件自动将其加入源码下载队列。
 
-**已有文献：** 在 Zotero 中选中文献，点击 **工具 → arXiv Source Helper → 为选中文献下载 TeX 源码**。菜单中也可开关自动下载、查看下载状态。
+**已有文献：** 在 Zotero 中选中文献，点击 **工具 → arXiv Source Helper → 下载源码并生成阅读版**。菜单中也可开关自动下载、查看下载状态。
 
 每篇文献会增加两个附件：
 
-| 附件                        | 内容                                                                                      |
-| --------------------------- | ----------------------------------------------------------------------------------------- |
-| arXiv TeX 源码查看版 · IDvN | HTML 源码副本：图片预览与原图下载、图注、章节目录、表格源码和展开的 TeX，附源文件名和行号 |
-| arXiv 原始源码 · IDvN       | arXiv 返回的原始压缩包；可能是单个 TeX，也可能是含图片的多文件包                          |
+| 附件                        | 内容                                                                     |
+| --------------------------- | ------------------------------------------------------------------------ |
+| arXiv PDF 逐页阅读版 · IDvN | 原始 PDF 的逐页 PNG，按页序嵌入一个自包含 HTML；图表、公式与正文保持原位 |
+| arXiv 原始源码 · IDvN       | arXiv 返回的原始压缩包；可能是单个 TeX，也可能是含图片的多文件包         |
 
-源码查看版保留公式和表格的 **TeX 命令**，不是排版后的数学公式或表格。原 PDF 仍适合核对图形和最终排版。
+阅读版完整保留 PDF 页面外观，不再单列图片区或表格区。HTML 中的页面是图片，不能直接选中文字或点击原论文中的链接；复制、检索和批注请使用原 PDF，AI 文字检索使用保留的 TeX 源码。
 
-升级 0.1.3 后，对已下载文献再执行一次“为选中文献下载 TeX 源码”。插件会复用本地源码重建副本，并更新原来的查看附件，不另加一份。预览失败会在状态中显示，可重试。
+升级 0.1.4 后重启 Zotero，对已下载文献再执行一次“下载源码并生成阅读版”。插件会复用本地源码重建副本，并更新原来的查看附件，不另加一份。优先使用文献下版本匹配的本地 PDF；没有可用附件时才从 arXiv 下载。生成失败会在状态中显示，可重试。
 
 普通附件可随 Zotero 文件同步。解包后的查询缓存存于 Zotero 数据目录的 `arxiv-source-helper/tex_source/<libraryID>-<itemKey>/`，属于本机数据；换电脑后可重新下载。插件不会自动扫描整个旧文献库。
 
@@ -45,7 +45,8 @@ node query.mjs ABCD1234 table "tab:interaction_memory"
 node query.mjs ABCD1234 figures
 node query.mjs ABCD1234 images
 node query.mjs ABCD1234 image "figures/fig01_overview.pdf" --output overview.pdf
-node query.mjs ABCD1234 image "figures/fig01_overview.pdf" --preview --output overview.png
+node query.mjs ABCD1234 pages
+node query.mjs ABCD1234 page 5 --output page-5.png
 node query.mjs ABCD1234 full
 ```
 
@@ -85,11 +86,11 @@ query.mjs           AI 使用的本地只读客户端
 build.py            构建、打包、生成更新清单
 ```
 
-可用 `ARXIV_SOURCE_FIXTURE` 指向本地的《Ask to Evolve》`2610.39446v1` 源码包运行额外验证。论文文件不包含在仓库中。提交和发布流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+可用 `ARXIV_SOURCE_FIXTURE` 指向本地的《Ask to Evolve》`2610.39446v1` 源码包运行额外验证。安装了 Playwright 的开发环境还可使用 `tests/render-paper.mjs` 对原始 PDF 做逐页渲染与浏览器检查。论文文件不包含在仓库中。提交和发布流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 已知限制
 
-自定义宏可能保留为原始命令；作者注释、未使用的命令不应当作最终正文。图形仍需结合 PDF 或源图像阅读。未支持的归档、模糊主文件和缺失源码会报告失败。图片列表、图注与原图现在可通过本地接口查询。PDF 图形默认预览第一页，多页内容请下载原图查看。
+HTML 采用图片页面，不能直接搜索或复制正文。AI 应使用 TeX 查询检索文字、表格和图注，使用 `pages` / `page` 查看页面图像。未支持的归档、模糊主文件和缺失源码会报告失败。本版限制原始 PDF 为 50 MiB、100 页以内。
 
 ## 来源与许可证
 
