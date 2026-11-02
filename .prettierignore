@@ -1,0 +1,8 @@
+.tools/
+build/
+dist/
+node_modules/
+runtime.js
+LICENSE
+FFLATE-LICENSE
+updates.json

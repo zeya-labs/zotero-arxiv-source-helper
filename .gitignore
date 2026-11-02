@@ -1,0 +1,13 @@
+.tools/
+build/
+dist/
+node_modules/
+runtime.js
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db

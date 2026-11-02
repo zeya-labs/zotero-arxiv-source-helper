@@ -1,0 +1,19 @@
+{
+  "addons": {
+    "arxiv-source-helper@local.research": {
+      "updates": [
+        {
+          "version": "0.1.2",
+          "update_link": "https://github.com/zeya-labs/zotero-arxiv-source-helper/releases/download/v0.1.2/arxiv-source-helper-0.1.2.xpi",
+          "update_hash": "sha256:f6bfc7ff4d123cc5e5b83cc8132a7f99e013da2deea10d5366e6d89ef0f25ef1",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "7.0",
+              "strict_max_version": "10.0.*"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
