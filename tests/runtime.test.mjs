@@ -162,15 +162,19 @@ test("save notification → versioned source → stored attachments → section 
     clearTimeout,
     btoa,
     atob,
-    renderSourcePDF: async (bytes) => {
-      renderedInputs.push(new TextDecoder().decode(bytes));
-      return {
-        number: 1,
-        width: 1200,
-        height: 1600,
-        dataURL: "data:image/png;base64,iVBORw==",
-        pages: 1,
-      };
+    runDocker: async (args, options) => {
+      renderedInputs.push(args);
+      const htmlDir = path.join(options.workdir, "html");
+      await fs.mkdir(htmlDir, { recursive: true });
+      await fs.writeFile(
+        path.join(htmlDir, "figure.png"),
+        Buffer.from("png-fixture"),
+      );
+      await fs.writeFile(
+        path.join(htmlDir, "main.html"),
+        '<html><body><article><h1>Ask to Evolve</h1><p>The guide has privileged spatial information. This is the body in source order.</p><figure class="ltx_figure"><img src="figure.png"><figcaption>System overview</figcaption></figure><table class="ltx_table"><tr><td>93.3</td></tr></table><math><mi>x</mi></math></article></body></html>',
+      );
+      return { exitCode: 0, stdout: "Status:conversion:0" };
     },
   });
   vm.runInContext(
@@ -228,7 +232,7 @@ test("save notification → versioned source → stored attachments → section 
   const image = await read({ mode: "image", q: imagePath });
   assert.equal(image.mime, "application/pdf");
   assert.ok(image.dataURL.startsWith("data:application/pdf;base64,"));
-  assert.ok(image.preview.dataURL.startsWith("data:image/png;base64,"));
+  assert.equal(image.preview, undefined);
   assert.ok(
     !requests.some((url) => url.includes("/pdf/")),
     "never download the full paper PDF",
@@ -241,7 +245,7 @@ test("save notification → versioned source → stored attachments → section 
   );
   const html = await fs.readFile(path.join(cache, "_ash-reading.html"), "utf8");
   assert.ok(html.includes("<img"));
-  assert.ok(html.includes("source-figure"));
+  assert.ok(html.includes("ltx_figure"));
   assert.ok(!html.includes("paper-page"));
   assert.equal(await IOUtils.exists(path.join(cache, "_ash-paper.pdf")), false);
   assert.equal(
@@ -251,7 +255,7 @@ test("save notification → versioned source → stored attachments → section 
   if (!realFixture)
     assert.ok(
       html.indexOf("The guide has privileged") <
-        html.indexOf('class="source-figure"'),
+        html.indexOf('class="ltx_figure"'),
     );
   assert.ok(!html.includes("Download original"));
   // Upgrading a previously generated reading copy uses cached sources and
@@ -260,7 +264,8 @@ test("save notification → versioned source → stored attachments → section 
     path.join(cache, "_ash-reader-version.json"),
     '{"version":1}',
   );
-  attachments[0].title = "arXiv PDF 逐页阅读版 · 2610.39446v1";
+  attachments.find((a) => a.attachmentContentType === "text/html").title =
+    "arXiv PDF 逐页阅读版 · 2610.39446v1";
   await Zotero.ArxivSourceHelper.fetchSelected({
     ZoteroPane: { getSelectedItems: () => [parent] },
   });
@@ -270,12 +275,47 @@ test("save notification → versioned source → stored attachments → section 
   assert.equal(attachments.length, 2);
   assert.equal(
     renderedInputs.length,
-    realFixture ? 14 : 1,
-    "reuse source figure previews on rebuild",
+    2,
+    "rebuilds HTML through LaTeXML on format upgrade",
   );
-  if (!realFixture) assert.equal(renderedInputs[0], "%PDF-test-fixture");
   assert.equal(requests.length, 1);
-  assert.ok(attachments[0].title.includes("TeX 阅读版"));
+  assert.ok(
+    attachments
+      .find((a) => a.attachmentContentType === "text/html")
+      .title.includes("TeX 阅读版"),
+  );
+  const readerPath = path.join(cache, "_ash-reading.html");
+  const successfulHTML = await fs.readFile(readerPath, "utf8");
+  context.runDocker = async () => ({
+    exitCode: 139,
+    stdout: "Fatal:package:fixture conversion failed",
+  });
+  await fs.writeFile(
+    path.join(cache, "_ash-reader-version.json"),
+    '{"version":1}',
+  );
+  await Zotero.ArxivSourceHelper.fetchSelected({
+    ZoteroPane: { getSelectedItems: () => [parent] },
+  });
+  for (
+    let i = 0;
+    i < 200 && Zotero.ArxivSourceHelper.getStatus()[0]?.[1].status !== "error";
+    i++
+  )
+    await new Promise((r) => setTimeout(r, 10));
+  assert.equal(Zotero.ArxivSourceHelper.getStatus()[0]?.[1].status, "error");
+  assert.equal(
+    await fs.readFile(readerPath, "utf8"),
+    successfulHTML,
+    "failed conversion preserves the good reader",
+  );
+  assert.equal(
+    attachments.length,
+    2,
+    "failed rebuild does not create a broken attachment",
+  );
+  const report = await read({ mode: "conversion" });
+  assert.equal(report.status, "failed");
   observer.notify("add", "item", [2]);
   await new Promise((r) => setTimeout(r, 30));
   assert.equal(requests.length, 1);

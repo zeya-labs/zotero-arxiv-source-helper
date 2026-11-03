@@ -4,9 +4,12 @@ dist/
 node_modules/
 runtime.js
 pdf-preview.js
-PDFJS-LICENSE
 LICENSE
 FFLATE-LICENSE
 updates.json
 
 src/generated/
+resources/ar5iv.css
+resources/AR5IV-CSS-LICENSE
+PARSE5-LICENSE
+ENTITIES-LICENSE

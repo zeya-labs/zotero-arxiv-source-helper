@@ -19,7 +19,7 @@ const [key, mode = "headings", query = "", port = "23119", libraryID = "1"] =
   args;
 if (!key) {
   console.error(
-    "Usage: node query.mjs ITEM_KEY [headings|section|search|table|figures|images|image|pages|page|full|status] [query] [port] [libraryID] [--output FILE] [--preview]",
+    "Usage: node query.mjs ITEM_KEY [headings|section|search|table|figures|images|image|pages|page|full|status|conversion] [query] [port] [libraryID] [--output FILE] [--preview]",
   );
   process.exit(2);
 }

@@ -84,41 +84,29 @@ def main():
     manifest = validate_manifest()
     compiler = compiler_path()
     fflate = package("fflate", "0.8.2", "fflate")
-    pdfjs = package("pdfjs-dist", "5.4.296", "pdfjs")
-    katex = package("katex", "0.16.22", "katex")
-    css = (katex / "dist/katex.min.css").read_text(encoding="utf-8")
-    def embedded_font(match):
-        font = katex / "dist" / match.group(1)
-        data = base64.b64encode(font.read_bytes()).decode()
-        return 'src:url(data:font/woff2;base64,' + data + ') format("woff2");'
-    css = re.sub(r'src:url\(([^)]+\.woff2)\) format\("woff2"\)[^;]*;', embedded_font, css)
-    if "url(fonts/" in css:
-        raise ValueError("KaTeX stylesheet still references external fonts")
-    generated = ROOT / "src/generated"
-    generated.mkdir(exist_ok=True)
-    (generated / "mathStyle.ts").write_text("export const mathCSS = " + json.dumps(css) + ";\n", encoding="utf-8")
+    parse5 = package("parse5", "7.2.1", "parse5")
+    entities = package("entities", "4.5.0", "entities")
     build = ROOT / "build"
     build.mkdir(exist_ok=True)
     alias = "--alias:fflate=" + str(fflate / "esm/browser.js")
     for entry, options in [
         ("src/core.ts", ["--platform=node", "--format=esm", "--outfile=build/core.mjs"]),
+        ("src/conversion.ts", ["--platform=node", "--format=esm", "--outfile=build/conversion.mjs"]),
         ("src/runtime.ts", ["--platform=browser", "--format=iife",
                             "--global-name=ArxivSourceHelperRuntime", "--target=firefox115",
                             "--outfile=build/runtime.js"]),
     ]:
-        subprocess.run([str(compiler), entry, "--bundle", alias, "--alias:katex=" + str(katex / "dist/katex.mjs"), *options], cwd=ROOT, check=True)
+        subprocess.run([str(compiler), entry, "--bundle", alias, "--alias:parse5=" + str(parse5), "--alias:entities=" + str(entities), "--loader:.css=text", *options], cwd=ROOT, check=True)
     shutil.copy2(build / "runtime.js", ROOT / "runtime.js")
     shutil.copy2(fflate / "LICENSE", ROOT / "FFLATE-LICENSE")
-    shutil.copy2(pdfjs / "LICENSE", ROOT / "PDFJS-LICENSE")
-    shutil.copy2(katex / "LICENSE", ROOT / "KATEX-LICENSE")
-    subprocess.run([str(compiler),'src/pdfPreview.ts','--bundle','--platform=browser','--format=iife','--global-name=ASHPDFPreview','--target=firefox140','--external:node:*','--log-override:empty-import-meta=silent','--alias:pdfjs-dist='+str(pdfjs),'--outfile=build/pdf-preview.js'],cwd=ROOT,check=True)
-    shutil.copy2(build/'pdf-preview.js',ROOT/'pdf-preview.js')
+    shutil.copy2(parse5 / "LICENSE", ROOT / "PARSE5-LICENSE")
+    shutil.copy2(entities / "LICENSE", ROOT / "ENTITIES-LICENSE")
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
     version = manifest["version"]
     xpi = dist / f"arxiv-source-helper-{version}.xpi"
     names = ["manifest.json", "bootstrap.js", "runtime.js", "LICENSE",
-             "FFLATE-LICENSE", "PDFJS-LICENSE", "KATEX-LICENSE", "pdf-preview.js", "THIRD_PARTY.md"]
+             "FFLATE-LICENSE", "PARSE5-LICENSE", "ENTITIES-LICENSE", "resources/AR5IV-CSS-LICENSE", "THIRD_PARTY.md"]
     with zipfile.ZipFile(xpi, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for name in names:
             info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))

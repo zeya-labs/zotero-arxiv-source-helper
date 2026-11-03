@@ -1,43 +1,89 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 var helperContext;
+var activeDockerProcesses = new Set();
 function install() {}
 function uninstall() {}
-async function withRenderDocument(win, render) {
-  // PDF.js appends SVG filter definitions to document.body. Zotero's XUL
-  // document has no body, so supply an HTML host in that same live document.
-  // Keeping filters and canvases in the same document preserves URL references.
-  const source = win.document;
-  const host = source.createElementNS("http://www.w3.org/1999/xhtml", "div");
-  host.setAttribute("aria-hidden", "true");
-  host.setAttribute(
-    "style",
-    "position:absolute;width:0;height:0;overflow:hidden;pointer-events:none",
+async function dockerExecutable() {
+  const { Subprocess } = ChromeUtils.importESModule(
+    "resource://gre/modules/Subprocess.sys.mjs",
   );
-  source.documentElement.append(host);
-  const document = new Proxy(source, {
-    get(target, name) {
-      if (name === "body") return host;
-      if (name === "createElement")
-        return (tag) =>
-          target.createElementNS("http://www.w3.org/1999/xhtml", tag);
-      const value = Reflect.get(target, name, target);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
+  const configured = Zotero.Prefs.get(
+    "extensions.arxivSourceHelper.dockerPath",
+    true,
+  );
+  if (configured) {
+    if (!(await IOUtils.exists(configured)))
+      throw new Error("Docker 路径不存在，请检查插件配置");
+    return { Subprocess, command: configured };
+  }
   try {
-    return await render(document);
+    return { Subprocess, command: await Subprocess.pathSearch("docker") };
+  } catch {}
+  if (Zotero.isWin) {
+    const command = PathUtils.join(
+      Subprocess.getEnvironment().ProgramFiles || "C:/Program Files",
+      "Docker",
+      "Docker",
+      "resources",
+      "bin",
+      "docker.exe",
+    );
+    if (await IOUtils.exists(command)) return { Subprocess, command };
+  }
+  throw new Error("未找到 Docker，请安装并启动 Docker Desktop");
+}
+async function runDocker(arguments_, options = {}) {
+  const { Subprocess, command } = await dockerExecutable();
+  const process = await Subprocess.call({
+    command,
+    arguments: arguments_,
+    workdir: options.workdir,
+    stderr: "stdout",
+  });
+  const task = { process, name: options.containerName };
+  activeDockerProcesses.add(task);
+  let timedOut = false,
+    output = "",
+    timer;
+  try {
+    timer = setTimeout(async () => {
+      timedOut = true;
+      try {
+        await process.kill(0);
+      } catch {}
+      if (task.name && /^ash-latexml-[a-z0-9-]+$/.test(task.name))
+        try {
+          await runDocker(["rm", "-f", task.name], { timeoutMS: 15000 });
+        } catch {}
+    }, options.timeoutMS || 30000);
+    await process.stdin.close();
+    const decoder = new TextDecoder();
+    while (true) {
+      const data = await process.stdout.read();
+      if (!data.byteLength) break;
+      output += decoder.decode(data, { stream: true });
+      if (output.length > 8 * 1024 * 1024)
+        output = output.slice(-8 * 1024 * 1024);
+    }
+    output += decoder.decode();
+    const { exitCode } = await process.wait();
+    return { exitCode, stdout: output, timedOut };
+  } catch (error) {
+    if (timedOut)
+      return {
+        exitCode: -1,
+        stdout: output + "\nDocker process timed out",
+        timedOut: true,
+      };
+    throw error;
   } finally {
-    host.remove();
+    clearTimeout(timer);
+    activeDockerProcesses.delete(task);
   }
 }
 async function startup({ rootURI }) {
   await Zotero.initializationPromise;
   await Zotero.uiReadyPromise;
-  // Zotero supplies these in the privileged bootstrap scope. Window properties
-  // need not expose them (e.g. a lexical IOUtils binding is not win.IOUtils).
-  // A plain object passed to loadSubScript is not a new global in Gecko:
-  // globalThis still points at the bootstrap sandbox. PDF.js reads its native
-  // constructors through globalThis, so use a real, separate global here.
   helperContext = new Components.utils.Sandbox(
     Services.scriptSecurityManager.getSystemPrincipal(),
     { sandboxName: "arxiv-source-helper-runtime" },
@@ -56,60 +102,10 @@ async function startup({ rootURI }) {
     clearTimeout,
     btoa,
     atob,
+    runDocker,
   });
-  const win = Zotero.getMainWindow();
-  for (const name of [
-    "DOMMatrix",
-    "Path2D",
-    "ImageData",
-    "DOMException",
-    "AbortController",
-    "AbortSignal",
-    "URL",
-    "ReadableStream",
-    "TransformStream",
-    "Blob",
-    "navigator",
-    "document",
-  ])
-    helperContext[name] = win[name];
-  helperContext.structuredClone = win.structuredClone.bind(win);
-  helperContext.console = win.console;
-  let rendererError;
-  // Load while the install root is available, rather than reopening the XPI
-  // later from a background download callback.
-  helperContext.renderSourcePDF = async function (bytes) {
-    if (rendererError)
-      throw new Error("PDF renderer failed to load: " + rendererError.message);
-    return withRenderDocument(win, (document) =>
-      helperContext.ASHPDFPreview.renderPDF(
-        bytes,
-        (width, height) => {
-          const canvas = document.createElementNS(
-            "http://www.w3.org/1999/xhtml",
-            "canvas",
-          );
-          canvas.width = width;
-          canvas.height = height;
-          return canvas;
-        },
-        document,
-        false,
-      ),
-    );
-  };
   Services.scriptloader.loadSubScript(rootURI + "runtime.js", helperContext);
   await helperContext.ArxivSourceHelperRuntime.default.startup();
-  // Menus, source queries and status stay available even if the renderer fails.
-  try {
-    Services.scriptloader.loadSubScript(
-      rootURI + "pdf-preview.js",
-      helperContext,
-    );
-  } catch (error) {
-    rendererError = error;
-    Zotero.logError(error);
-  }
 }
 function onMainWindowLoad({ window }) {
   helperContext?.ArxivSourceHelperRuntime?.default.addWindow(window);
@@ -119,5 +115,13 @@ function onMainWindowUnload({ window }) {
 }
 async function shutdown() {
   await helperContext?.ArxivSourceHelperRuntime?.default.shutdown();
+  const tasks = [...activeDockerProcesses];
+  await Promise.allSettled(
+    tasks.map(async (task) => {
+      await task.process.kill(0);
+      if (task.name && /^ash-latexml-[a-z0-9-]+$/.test(task.name))
+        await runDocker(["rm", "-f", task.name], { timeoutMS: 15000 });
+    }),
+  );
   helperContext = null;
 }

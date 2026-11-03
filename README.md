@@ -1,81 +1,60 @@
 # arXiv Source Helper for Zotero
 
-保存 arXiv 的 TeX 源码，并生成图表随正文排列、文字可选择和检索的 **TeX 阅读版**。
+保存 arXiv 的原始 TeX 源码，并通过 **LaTeXML / ar5ivist** 生成正文、图表、公式连续排列的 HTML 阅读版。手写 TeX→HTML 渲染器已移除；源码检索与文件位置查询保留。
 
-正文按照主文件的 `\input` / `\include` 顺序展开。遇到 figure 就显示对应图片和图注，遇到 table 就显示表格；公式在本地排版。PDF 图源转换为 PNG，正文保留为 HTML 文字。不会把整篇论文 PDF 逐页截图，也没有单独的图片或表格集中区。
+**本分支为 0.2.0 开发版，尚未发布。Ask to Evolve 实测未通过，请继续保留现有阅读版。** 官方固定镜像及较旧镜像均出现异常退出，新版上游代码对照也未完成转换，不能据此宣称该论文已支持。详见 [实际验证记录](docs/LATEXML-VALIDATION.md)。主分支的 0.1.7 不会收到本分支的自动更新。
 
-浏览器照常使用 Zotero Connector，无需模型密钥或 MinerU 密钥。源码从 arXiv 下载，不上传 PDF。
+## 转换方式
 
-**当前为预览版，要求 Zotero 10。** 已在 Windows / Zotero 10.0.7 中生成《Ask to Evolve》的正文、14 幅图和 7 张表，并完成实际附件导入。当前 XPI 的安装、Connector 自动触发和其他系统仍需验证，详见 [验证记录](docs/VALIDATION.md)。
+插件解包原始源码，在本机 Docker 容器中运行官方 ar5ivist（内部使用 LaTeXML）。TeX 宏、文档类、公式、图表及交叉引用由上游引擎处理。插件只检查诊断信息、解析引擎产出的 HTML、内嵌本地图片和样式，生成离线阅读文件；不再自己解释 TeX 排版。
 
-## 安装
+图表保留引擎生成的正文位置。不会将整篇 PDF 截图，也不会把图表移到独立展示区。LaTeXML 仍可能遇到不支持的类或宏包，不保证适用于所有论文。
 
-1. 在 [Releases](https://github.com/zeya-labs/zotero-arxiv-source-helper/releases) 下载 **0.1.7 或更新版**的 `.xpi`。
-2. 在 Zotero 打开 **Tools / 工具 → Plugins / 插件 → 齿轮 → Install Add-on From File / 从文件安装插件**，选择安装包并重启。
-3. 工具菜单中应出现 **arXiv Source Helper**。
+## 本地开发试用
 
-直接覆盖旧版即可，不需要卸载或修改 Zotero Connector。0.1.4–0.1.6 的整页 PDF 阅读版已被 TeX 正文阅读版取代。
+需要 Zotero 10、Node 24+、Python 3.12+，以及已启动、支持 Linux 容器的 Docker Desktop。固定官方镜像约占 8.4 GB 磁盘，首次需下载。
 
-## 使用
+```sh
+python build.py
+npm test
+npm run check
+```
 
-- **新文献：** 在 arXiv 页面用 Zotero Connector 保存，插件自动补充源码与阅读版。
-- **已有文献：** 选中文献，点击 **工具 → arXiv Source Helper → 下载源码并生成阅读版**。菜单内可查看任务状态和开关自动下载。
-- **升级已有副本：** 再执行一次生成。插件复用缓存的源码和图源，更新旧附件并恢复“TeX 阅读版”标题。
+构建结果在 `dist/`。这是开发测试包，尚未在独立 Zotero 配置中完成安装与 Connector 端到端验证，不建议替换日常使用版本。
 
-每篇文献会增加两个附件：
+测试包安装后，工具菜单中的 **arXiv Source Helper → 准备 LaTeXML 转换环境（下载镜像）** 下载固定镜像。选择条目后执行 **下载源码并生成阅读版**；随后可从 **查看选中文献转换报告** 查看结果。若找不到 Docker，可通过 Zotero 高级配置的 `extensions.arxivSourceHelper.dockerPath` 指定 Docker 可执行文件的完整路径。
 
-| 附件                    | 内容                                                                      |
-| ----------------------- | ------------------------------------------------------------------------- |
-| arXiv TeX 阅读版 · IDvN | 连续 HTML 正文、原位图表、公式、文内跳转和目录；图表旁可展开原始 TeX 核对 |
-| arXiv 原始源码 · IDvN   | arXiv 返回的原始源码包，包括 TeX 和图片等素材                             |
+## 失败处理
 
-阅读版是一个自包含 HTML，内嵌图片、公式样式与字体，打开时无需联网。普通附件可使用 Zotero 文件同步；解包查询缓存属于本机数据，换电脑后可重新生成。插件不自动扫描整个旧文献库。
+原始源码附件先保存。转换成功且通过检查后，才更新 TeX 阅读版；引擎退出失败、报告 Error/Fatal、缺图片、存在错误节点或未解析引用时，保留原阅读版，记录失败和日志。警告单独记在报告中，成功状态不意味着已经人工核对全部内容。
+
+源码转换在无网络、只读容器根目录中执行，只挂载当前文献的独立工作目录；不挂载 Zotero 文献库或 Docker 控制接口。归档拒绝越界路径和链接，限制压缩及展开大小。查看生成 HTML 不加载远程图片、脚本、样式或字体。
+
+## 不依赖 Zotero 的真实转换测试
+
+同一个生产转换模块也可从命令行调用：
+
+```sh
+node scripts/convert.mjs /path/to/source.gz /path/to/result "Paper title" 2610.39446v1
+```
+
+输出 `report.json` 和独立工作目录（含原始源码、引擎日志）；只有通过检查才输出 `reading.html`。同一输出目录再次测试失败时会保留之前成功的 HTML，务必以本次报告状态为准。可选 `--image=latexml/ar5ivist@sha256:...` 仅用于固定官方镜像的版本对照。
 
 ## 给 AI 读取
 
-`query.mjs` 是只读客户端，需要 Node 24+ 和正在运行的 Zotero。将示例中的 `ABCD1234` 换成父条目的 Zotero 编号：
+只读查询保留源码中的文件和行位置，不依赖 HTML 转换成功：
 
 ```sh
 node query.mjs ABCD1234 headings
 node query.mjs ABCD1234 section "Active Interaction"
 node query.mjs ABCD1234 search "privileged"
 node query.mjs ABCD1234 table "tab:interaction_memory"
-node query.mjs ABCD1234 figures
-node query.mjs ABCD1234 images
-node query.mjs ABCD1234 image "figures/fig01_overview.pdf" --preview --output overview.png
-node query.mjs ABCD1234 full
+node query.mjs ABCD1234 image "figures/fig01_overview.pdf" --output overview.pdf
+node query.mjs ABCD1234 conversion
 ```
 
-章节、搜索结果、图表查询携带源文件位置。先查目录，再读章节或表格，可避免一次传入全部源码。表格查询保留原始 TeX；图片查询可导出原图或 PNG 预览。查询不会隐式触发下载。详情见 [本地查询接口](docs/LOCAL-API.md)。
+将 `ABCD1234` 替换为 Zotero 父条目编号。LaTeXML 负责阅读版内的图片转换；此分支不再另行生成查询用的 PDF 图源 PNG 预览，已有预览缓存仍可读取。详见 [本地接口](docs/LOCAL-API.md)。
 
-## 限制与下载行为
+## 开源组件
 
-- 这是 TeX 到 HTML 的阅读转换，不是完整 LaTeX 编译器。支持常见章节、文字样式、公式、列表、图片与 tabular / tabularx 表格；特殊宏可能保留为可见源码，复杂表格可展开原始 TeX 核对。
-- 图表使用 TeX 定义位置的顺序，不模拟排版器将浮动图表移到其他页的行为。PDF 图源默认预览第一页，原图下载保留完整文件；EPS 暂无 PNG 预览。
-- 使用固定 arXiv 版本；条目 ID、版本或主文件有歧义时停止并显示错误。
-- 重复通知合并，下载串行进行，请求至少间隔 3.2 秒；失败可从菜单重试。
-- 不执行或编译下载的 TeX。归档限制为 50 MiB 压缩数据、200 MiB 展开数据、3000 个文件，拒绝越界路径与链接。
-
-## 开发与验证
-
-需要 Python 3.12+ 和 Node 24+：
-
-```sh
-git clone https://github.com/zeya-labs/zotero-arxiv-source-helper.git
-cd zotero-arxiv-source-helper
-python build.py
-npm test
-npm run check
-```
-
-构建脚本下载固定版本的 esbuild、fflate、PDF.js 和 KaTeX，并校验 npm 包 SHA-512。数学字体在构建时嵌入；安装包和校验文件输出到 `dist/`，同时生成匹配的 `updates.json`。格式检查可安装开发依赖后运行 `npm run format:check`。
-
-默认测试不联网、不使用真实文献库。可设置 `ARXIV_SOURCE_FIXTURE` 运行本地真实源码包测试；有 Playwright 时，使用 `tests/render-source.mjs SOURCE.gz OUTPUT_DIR` 验证整份 HTML 的源顺序、图片、表格、公式和离线加载，设置 `ASH_BROWSER_MODULE` 指向 Playwright。论文源码与生成样例不提交到仓库。
-
-构建支持 Windows、macOS、Linux 的 x64 / arm64；目前仅实测 Windows x64。贡献与发布流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-## 来源与许可证
-
-TeX 解析与存储组件复用自 [Asianfleet/mineru-for-zotero](https://github.com/Asianfleet/mineru-for-zotero)。本项目独立维护，不代表 Zotero、arXiv 或 MinerU 官方。
-
-项目为 **AGPL-3.0-or-later**；fflate 和 KaTeX 为 MIT，PDF.js 为 Apache-2.0。来源、固定版本与本地修改见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+本项目采用 AGPL-3.0-or-later。原始源码索引与存储复用 [MinerU for Zotero](https://github.com/Asianfleet/mineru-for-zotero) 的相关模块，HTML 转换调用 [ar5ivist](https://github.com/dginev/ar5ivist) 和 [LaTeXML](https://github.com/brucemiller/LaTeXML)。样式使用 ar5iv-css，HTML 处理使用 parse5。组件版本、许可证及修改记录见 [THIRD_PARTY.md](THIRD_PARTY.md)。

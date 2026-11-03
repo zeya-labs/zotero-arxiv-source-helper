@@ -1,3 +1,12 @@
+# 0.2.0 — Unreleased development branch
+
+- Replace the custom TeX→HTML renderer with a pinned official LaTeXML/ar5ivist Docker backend.
+- Keep engine-generated content order and embed generated local images/styles into an offline HTML reading copy.
+- Retain source attachments and source queries even when conversion fails; never replace a good reader with failed output.
+- Add conversion reports and a standalone runner using the production conversion pipeline.
+- Remove bundled KaTeX and PDF.js rendering dependencies.
+- Ask to Evolve did not pass real conversion; no release or main-branch automatic update is published. See docs/LATEXML-VALIDATION.md.
+
 # Changelog
 
 ## 0.1.7 — 2026-11-02 (preview)
