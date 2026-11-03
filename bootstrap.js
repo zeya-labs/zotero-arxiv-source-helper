@@ -2,6 +2,34 @@
 var helperContext;
 function install() {}
 function uninstall() {}
+async function withRenderDocument(win, render) {
+  // PDF.js appends SVG filter definitions to document.body. Zotero's XUL
+  // document has no body, so supply an HTML host in that same live document.
+  // Keeping filters and canvases in the same document preserves URL references.
+  const source = win.document;
+  const host = source.createElementNS("http://www.w3.org/1999/xhtml", "div");
+  host.setAttribute("aria-hidden", "true");
+  host.setAttribute(
+    "style",
+    "position:absolute;width:0;height:0;overflow:hidden;pointer-events:none",
+  );
+  source.documentElement.append(host);
+  const document = new Proxy(source, {
+    get(target, name) {
+      if (name === "body") return host;
+      if (name === "createElement")
+        return (tag) =>
+          target.createElementNS("http://www.w3.org/1999/xhtml", tag);
+      const value = Reflect.get(target, name, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  try {
+    return await render(document);
+  } finally {
+    host.remove();
+  }
+}
 async function startup({ rootURI }) {
   await Zotero.initializationPromise;
   await Zotero.uiReadyPromise;
@@ -53,20 +81,22 @@ async function startup({ rootURI }) {
   helperContext.renderPaperPDF = async function (bytes, onProgress) {
     if (rendererError)
       throw new Error("PDF renderer failed to load: " + rendererError.message);
-    return helperContext.ASHPDFPreview.renderPDF(
-      bytes,
-      (width, height) => {
-        const canvas = win.document.createElementNS(
-          "http://www.w3.org/1999/xhtml",
-          "canvas",
-        );
-        canvas.width = width;
-        canvas.height = height;
-        return canvas;
-      },
-      win.document,
-      true,
-      onProgress,
+    return withRenderDocument(win, (document) =>
+      helperContext.ASHPDFPreview.renderPDF(
+        bytes,
+        (width, height) => {
+          const canvas = document.createElementNS(
+            "http://www.w3.org/1999/xhtml",
+            "canvas",
+          );
+          canvas.width = width;
+          canvas.height = height;
+          return canvas;
+        },
+        document,
+        true,
+        onProgress,
+      ),
     );
   };
   Services.scriptloader.loadSubScript(rootURI + "runtime.js", helperContext);

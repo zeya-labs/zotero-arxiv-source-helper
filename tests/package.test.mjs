@@ -142,3 +142,58 @@ test("bootstrap loads the real PDF bundle in its own global after menus start", 
   bootstrapFixture());
 test("renderer failure preserves runtime startup and gives a readable error", () =>
   bootstrapFixture(true));
+
+test("XUL rendering gets a live filter host and cleans it up on success or error", async () => {
+  let attached = false,
+    removed = 0;
+  const host = {
+    setAttribute() {},
+    remove() {
+      attached = false;
+      removed++;
+    },
+  };
+  const xul = {
+    body: null,
+    createElementNS(namespace, name) {
+      assert.equal(this, xul);
+      assert.equal(namespace, "http://www.w3.org/1999/xhtml");
+      return name === "div" ? host : { name };
+    },
+    documentElement: {
+      append(value) {
+        assert.equal(value, host);
+        attached = true;
+      },
+    },
+  };
+  const scope = vm.createContext({ setTimeout, clearTimeout });
+  vm.runInContext(
+    await readFile(new URL("../bootstrap.js", import.meta.url), "utf8"),
+    scope,
+  );
+  assert.equal(
+    await scope.withRenderDocument({ document: xul }, async (document) => {
+      assert.equal(document.body, host);
+      assert.ok(attached);
+      assert.equal(document.createElement("span").name, "span");
+      assert.equal(
+        document.createElementNS("http://www.w3.org/1999/xhtml", "canvas").name,
+        "canvas",
+      );
+      return "rendered";
+    }),
+    "rendered",
+  );
+  assert.equal(removed, 1);
+  assert.equal(attached, false);
+  assert.equal(xul.body, null);
+  await assert.rejects(
+    scope.withRenderDocument({ document: xul }, async () => {
+      throw new Error("render-failed");
+    }),
+    /render-failed/,
+  );
+  assert.equal(removed, 2);
+  assert.equal(attached, false);
+});

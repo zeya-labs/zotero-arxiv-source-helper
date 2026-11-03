@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6 — 2026-11-02 (preview)
+
+- Fix actual PDF rendering in Zotero's XUL window, whose document has no HTML body. Supply a temporary live HTML host for PDF.js SVG filters and clean it up after success or failure.
+- Create HTML helper elements in the correct namespace and bind native document methods to their original document.
+- Verify complete 29-page rendering and actual Zotero attachment import for Ask to Evolve, including source reuse, all embedded PNGs, and the framework figure/results table in context.
+
 ## 0.1.5 — 2026-11-02 (preview)
 
 - Fix missing Tools menu and local endpoint after upgrading to 0.1.4: PDF.js saw the bootstrap global instead of the supplied native DOM constructors.
