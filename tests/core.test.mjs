@@ -136,3 +136,17 @@ test("queue serializes work, deduplicates pending events, and continues after a 
   await queue.drain();
   assert.deepEqual(done, [1, 3]);
 });
+
+test("source archives cannot spoof trusted reader cache metadata", async () => {
+  for (const name of [
+    "_ash-reading.html",
+    "_ash-conversion-report.json",
+    "_ash-reader-version.json",
+    "manifest.json",
+    "arxiv-source.gz",
+  ])
+    await assert.rejects(
+      prepareSource(tar({ "main.tex": main, [name]: "untrusted" })),
+      /reserved-cache-path/,
+    );
+});

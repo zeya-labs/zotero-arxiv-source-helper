@@ -1,6 +1,6 @@
 {
   "name": "zotero-arxiv-source-helper",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-or-later",
@@ -11,8 +11,8 @@
   },
   "scripts": {
     "build": "python build.py",
-    "test": "node --test --test-isolation=none tests/core.test.mjs tests/runtime.test.mjs tests/package.test.mjs tests/figures.test.mjs tests/query.test.mjs tests/reader.test.mjs",
-    "check": "node --check bootstrap.js && node --check query.mjs",
+    "test": "node --test --test-isolation=none tests/core.test.mjs tests/runtime.test.mjs tests/package.test.mjs tests/figures.test.mjs tests/query.test.mjs tests/conversion.test.mjs",
+    "check": "node --check bootstrap.js && node --check query.mjs && node --check scripts/convert.mjs",
     "format:check": "prettier --check ."
   },
   "devDependencies": {

@@ -1,3 +1,5 @@
+> The records below describe historical releases. They are not evidence that the new LaTeXML backend supports Ask to Evolve. For this branch see [LaTeXML validation](LATEXML-VALIDATION.md).
+
 # Validation status
 
 Last checked: 2026-11-02. Current release: **0.1.7 preview**.

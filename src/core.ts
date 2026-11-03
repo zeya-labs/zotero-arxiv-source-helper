@@ -8,13 +8,6 @@ import {
 } from "./vendor/latexQuery/parser";
 import { indexFigures } from "./figures";
 export { indexFigures } from "./figures";
-export { sourceHTML, orderedSourceBlocks } from "./reader";
-export interface ImagePreview {
-  dataURL?: string;
-  pages?: number;
-  error?: string;
-}
-
 export function resolveArxiv(fields: string[]): string {
   const ids: string[] = [];
   for (const field of fields) {
@@ -41,6 +34,16 @@ export function resolveArxiv(fields: string[]): string {
   return id;
 }
 
+export function validateSourcePaths(paths: string[]) {
+  if (
+    paths.some(
+      (path) =>
+        /^_ash-/i.test(path.split("/")[0]) ||
+        /^(?:manifest\.json|arxiv-source\.(?:gz|bin))$/i.test(path),
+    )
+  )
+    throw Error("reserved-cache-path");
+}
 export async function prepareSource(bytes: Uint8Array, mainFile?: string) {
   const files = await decodeSourceArchive(bytes);
   const main = selectTexMainFile(files, mainFile);
@@ -50,6 +53,7 @@ export function prepareFiles(
   files: { path: string; bytes: Uint8Array }[],
   main: string,
 ) {
+  validateSourcePaths(files.map((file) => file.path));
   const textFiles = files
     .filter((f) => f.path.endsWith(".tex"))
     .map((f) => ({ path: f.path, content: new TextDecoder().decode(f.bytes) }));

@@ -1,3 +1,6 @@
 * text=auto eol=lf
 *.xpi binary
 *.gz binary
+
+# Preserve the vendored upstream stylesheet byte-for-byte.
+resources/ar5iv.css -whitespace
