@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5 — 2026-11-02 (preview)
+
+- Fix missing Tools menu and local endpoint after upgrading to 0.1.4: PDF.js saw the bootstrap global instead of the supplied native DOM constructors.
+- Load runtime scripts into a genuine Gecko sandbox and register menus/source queries before initializing the PDF renderer.
+- Keep the runtime available and report a readable error if the renderer fails to load.
+- Exercise the actual PDF bundle in bootstrap regression tests, including renderer failure. Verify menu/API/renderer startup in Zotero 10.0.7 without installing over the user's copy.
+
 ## 0.1.4 — 2026-11-02 (preview)
 
 - Replace the separated figure/table source view with original PDF pages rendered as PNGs in a self-contained HTML reading copy.

@@ -3,9 +3,9 @@
     "arxiv-source-helper@local.research": {
       "updates": [
         {
-          "version": "0.1.4",
-          "update_link": "https://github.com/zeya-labs/zotero-arxiv-source-helper/releases/download/v0.1.4/arxiv-source-helper-0.1.4.xpi",
-          "update_hash": "sha256:cdfa5558d5413cecaf3c962071d923c0921c3e374c0aa9fd7ee6325136d305d7",
+          "version": "0.1.5",
+          "update_link": "https://github.com/zeya-labs/zotero-arxiv-source-helper/releases/download/v0.1.5/arxiv-source-helper-0.1.5.xpi",
+          "update_hash": "sha256:f20c8b6a96393d7a3e55a2066fb75ae6d3a78c8ab8a0900149e89d5ac099c386",
           "applications": {
             "zotero": {
               "strict_min_version": "10.0",

@@ -21,7 +21,7 @@ test("manifest supplies Zotero mandatory fields including the update URL", async
   assert.match(app.id, /^[\w.-]+@[\w.-]+$/);
 });
 
-test("bootstrap passes privileged globals directly and cleans up on shutdown", async () => {
+async function bootstrapFixture(failRenderer = false) {
   let started = 0,
     stopped = 0;
   const loaded = [];
@@ -36,12 +36,38 @@ test("bootstrap passes privileged globals directly and cleans up on shutdown", a
     btoa,
     atob,
   };
+  const errors = [];
+  const browserGlobals = {
+    DOMException,
+    DOMMatrix: class DOMMatrix {},
+    structuredClone,
+    console,
+    document: {},
+    navigator: {
+      language: "en-US",
+      platform: "Win32",
+      userAgent: "Mozilla/5.0",
+    },
+    AbortController,
+    AbortSignal,
+    URL,
+    ReadableStream,
+    TransformStream,
+    Blob,
+  };
+  const pdfBundle = await readFile(
+    new URL("../build/pdf-preview.js", import.meta.url),
+    "utf8",
+  );
+  const principal = {};
   const Zotero = {
+    logError: (e) => errors.push(e),
     initializationPromise: Promise.resolve(),
     uiReadyPromise: Promise.resolve(),
-    getMainWindow: () => ({ structuredClone, console, document: {} }),
+    getMainWindow: () => browserGlobals,
   };
   const Services = {
+    scriptSecurityManager: { getSystemPrincipal: () => principal },
     scriptloader: {
       loadSubScript(url, context) {
         loaded.push(url);
@@ -53,9 +79,17 @@ test("bootstrap passes privileged globals directly and cleans up on shutdown", a
         );
         for (const [name, value] of Object.entries(globals))
           assert.equal(context[name], value);
-        if (url.endsWith("pdf-preview.js"))
-          context.ASHPDFPreview = { renderPDF: async () => [] };
-        else
+        if (url.endsWith("pdf-preview.js")) {
+          assert.equal(started, 1, "register menus and API before PDF.js");
+          assert.ok(vm.isContext(context), "renderer requires a real global");
+          assert.equal(
+            vm.runInContext("globalThis.DOMException", context),
+            DOMException,
+          );
+          if (failRenderer) throw new Error("renderer-unavailable");
+          vm.runInContext(pdfBundle, context);
+          assert.equal(typeof context.ASHPDFPreview.renderPDF, "function");
+        } else
           context.ArxivSourceHelperRuntime = {
             default: {
               startup: async () => {
@@ -73,6 +107,14 @@ test("bootstrap passes privileged globals directly and cleans up on shutdown", a
     Zotero,
     Services,
     ChromeUtils: {},
+    Components: {
+      utils: {
+        Sandbox: function (p) {
+          assert.equal(p, principal);
+          return vm.createContext({});
+        },
+      },
+    },
     ...globals,
   });
   vm.runInContext(
@@ -82,9 +124,21 @@ test("bootstrap passes privileged globals directly and cleans up on shutdown", a
   await context.startup({ rootURI: "jar:file:///test.xpi!/" });
   assert.equal(started, 1);
   assert.deepEqual(loaded, [
-    "jar:file:///test.xpi!/pdf-preview.js",
     "jar:file:///test.xpi!/runtime.js",
+    "jar:file:///test.xpi!/pdf-preview.js",
   ]);
+  if (failRenderer) {
+    assert.equal(errors.length, 1);
+    await assert.rejects(
+      context.helperContext.renderPaperPDF(new Uint8Array()),
+      /renderer-unavailable/,
+    );
+  } else assert.deepEqual(errors, []);
   await context.shutdown();
   assert.equal(stopped, 1);
-});
+}
+
+test("bootstrap loads the real PDF bundle in its own global after menus start", () =>
+  bootstrapFixture());
+test("renderer failure preserves runtime startup and gives a readable error", () =>
+  bootstrapFixture(true));
