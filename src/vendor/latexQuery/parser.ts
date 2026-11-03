@@ -65,7 +65,19 @@ export function expandLatexSource(
     if (content === undefined || visiting.has(path)) return;
     visiting.add(path);
     let cursor = 0;
-    for (const command of scanLatexCommands(content)) {
+    const commands = scanLatexCommands(content).flatMap((command) => {
+      // Common classes use \abstract{\input{abstract}} before the document.
+      // The scanner treats the outer argument atomically, so inspect it here.
+      if (command.name !== "abstract" || command.argument === undefined)
+        return [command];
+      const offset = command.end - command.argument.length - 1;
+      return scanLatexCommands(command.argument).map((inner) => ({
+        ...inner,
+        start: inner.start + offset,
+        end: inner.end + offset,
+      }));
+    });
+    for (const command of commands) {
       if (
         (command.name !== "input" && command.name !== "include") ||
         !command.argument

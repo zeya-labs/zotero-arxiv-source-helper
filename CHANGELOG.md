@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.7 — 2026-11-02 (preview)
+
+- Restore the intended TeX reading copy: selectable body text in expanded input/include order, with figures and tables embedded at their source positions.
+- Render only referenced source PDF figures as PNGs. Remove full-paper PDF downloading and page-image generation from the workflow.
+- Convert common tabular/tabularx tables to selectable HTML, including row/column spans; preserve original figure/table TeX for verification.
+- Render equations locally with bundled KaTeX and embedded fonts, without viewer scripts or remote requests. Resolve common text macros, internal references and appendix figure labels.
+- Expand abstract inputs before the document body; rebuild old reading attachments in place and reuse source-image previews.
+- Verify real Zotero generation for Ask to Evolve: 14 inline figures, 7 inline tables and no full-page images. Add source-order, table-cell, escaping, preview-cache and source-only rendering regression coverage.
+
 ## 0.1.6 — 2026-11-02 (preview)
 
 - Fix actual PDF rendering in Zotero's XUL window, whose document has no HTML body. Supply a temporary live HTML host for PDF.js SVG filters and clean it up after success or failure.

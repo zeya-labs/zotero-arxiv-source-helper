@@ -42,7 +42,13 @@ async function bootstrapFixture(failRenderer = false) {
     DOMMatrix: class DOMMatrix {},
     structuredClone,
     console,
-    document: {},
+    document: {
+      createElementNS(namespace, tag) {
+        assert.equal(namespace, "http://www.w3.org/1999/xhtml");
+        return tag === "div" ? { setAttribute() {}, remove() {} } : {};
+      },
+      documentElement: { append() {} },
+    },
     navigator: {
       language: "en-US",
       platform: "Win32",
@@ -130,10 +136,28 @@ async function bootstrapFixture(failRenderer = false) {
   if (failRenderer) {
     assert.equal(errors.length, 1);
     await assert.rejects(
-      context.helperContext.renderPaperPDF(new Uint8Array()),
+      context.helperContext.renderSourcePDF(new Uint8Array()),
       /renderer-unavailable/,
     );
-  } else assert.deepEqual(errors, []);
+  } else {
+    assert.deepEqual(errors, []);
+    context.helperContext.ASHPDFPreview = {
+      renderPDF: async (bytes, createCanvas, document, allPages) => {
+        assert.equal(
+          allPages,
+          false,
+          "render a source figure, never all paper pages",
+        );
+        assert.ok(document.body);
+        assert.equal(createCanvas(20, 30).width, 20);
+        return { dataURL: "data:image/png;base64,iVBORw==" };
+      },
+    };
+    const preview = await context.helperContext.renderSourcePDF(
+      new Uint8Array([37]),
+    );
+    assert.equal(preview.dataURL, "data:image/png;base64,iVBORw==");
+  }
   await context.shutdown();
   assert.equal(stopped, 1);
 }

@@ -78,7 +78,7 @@ async function startup({ rootURI }) {
   let rendererError;
   // Load while the install root is available, rather than reopening the XPI
   // later from a background download callback.
-  helperContext.renderPaperPDF = async function (bytes, onProgress) {
+  helperContext.renderSourcePDF = async function (bytes) {
     if (rendererError)
       throw new Error("PDF renderer failed to load: " + rendererError.message);
     return withRenderDocument(win, (document) =>
@@ -94,8 +94,7 @@ async function startup({ rootURI }) {
           return canvas;
         },
         document,
-        true,
-        onProgress,
+        false,
       ),
     );
   };

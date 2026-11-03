@@ -28,8 +28,8 @@ The source cache lives under Zotero's data directory. External clients should qu
 
 `mode=figures` returns figure labels, captions (plain and original TeX), referenced image paths, and source locations. `number` is source order, not the final publication figure number. `mode=images` lists the available assets and associated figure IDs.
 
-`mode=image&q=figures/example.pdf` returns its MIME type and original bytes as a data URL, plus a legacy PNG preview when one was previously cached. The CLI suppresses base64 output: use `--output FILE` to save the original, or add `--preview` to save its PNG preview. Existing output files are never overwritten. PDF previews show the first page; originals retain all pages.
+`mode=image&q=figures/example.pdf` returns its MIME type and original bytes as a data URL, plus the source-figure PNG preview when generated. The CLI suppresses base64 output: use `--output FILE` to save the original, or add `--preview` to save its PNG preview. Existing output files are never overwritten. PDF previews show the first page; originals retain all pages.
 
-## Full paper pages
+## Compatibility with 0.1.4–0.1.6 page caches
 
-`mode=pages` returns the generated paper-page manifest. `mode=page&q=5` returns page 5 as a PNG data URL. The CLI can save it with `node query.mjs ABCD1234 page 5 --output page-5.png`. These are complete original PDF pages, so figures and tables stay in their original text context. New reading copies no longer generate isolated figure previews; use page exports for PNG viewing, or `image` for the original source asset.
+`mode=pages` and `mode=page&q=5` can still read a page cache left by those versions. Version 0.1.7 no longer creates full-paper page caches. For new reading copies, use `figures`, `images` and `image --preview` to retrieve source figures; use TeX queries for body text and tables.

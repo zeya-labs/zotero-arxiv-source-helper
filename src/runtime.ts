@@ -2,10 +2,11 @@
 import {
   resolveArxiv,
   prepareSource,
-  paperHTML,
+  sourceHTML,
+  prepareFiles,
   indexFigures,
   SourceQueue,
-  type PaperPage,
+  type ImagePreview,
 } from "./core";
 import { expandLatexSource } from "./vendor/latexQuery/parser";
 import { bytesDataURL } from "./figures";
@@ -15,11 +16,8 @@ import { createTexSourceStorage } from "./vendor/texSource/storage";
 import { createLatexQueryService } from "./vendor/latexQuery/service";
 
 declare const Zotero: any, IOUtils: any, PathUtils: any;
-declare function renderPaperPDF(
-  bytes: Uint8Array,
-  onProgress: (page: number, total: number) => void,
-): Promise<PaperPage[]>;
-const READER_VERSION = 3;
+declare function renderSourcePDF(bytes: Uint8Array): Promise<ImagePreview>;
+const READER_VERSION = 4;
 const PREFIX = "extensions.arxivSourceHelper.";
 const ENDPOINT = "/arxiv-source-helper/read";
 const states = new Map<number, { status: string; message?: string }>();
@@ -99,39 +97,6 @@ async function addAttachment(
     contentType: type,
   });
 }
-async function originalPDF(
-  item: any,
-  id: string,
-  dir: string,
-): Promise<Uint8Array> {
-  const cached = PathUtils.join(dir, "_ash-paper.pdf");
-  if (await IOUtils.exists(cached)) return IOUtils.read(cached);
-  let bytes;
-  for (const attachmentID of item.getAttachments()) {
-    const attachment = Zotero.Items.get(attachmentID);
-    if (attachment?.attachmentContentType !== "application/pdf") continue;
-    let attachmentArxivID;
-    try {
-      attachmentArxivID = resolveArxiv([attachment.getField("url") || ""]);
-    } catch {
-      continue;
-    }
-    if (attachmentArxivID !== id) continue;
-    const path = await attachment.getFilePathAsync();
-    if (path && (await IOUtils.exists(path))) {
-      bytes = await IOUtils.read(path);
-      break;
-    }
-  }
-  if (!bytes) bytes = await download("https://arxiv.org/pdf/" + id);
-  if (bytes.byteLength > 50 * 1024 * 1024)
-    throw Error("paper-pdf-exceeds-50-mib");
-  if (new TextDecoder().decode(bytes.slice(0, 5)) !== "%PDF-")
-    throw Error("paper-pdf-unavailable");
-  await IOUtils.write(cached, bytes);
-  return bytes;
-}
-
 async function fetchItem(itemID: number) {
   if (!alive) return;
   const item = await Zotero.Items.getAsync(itemID);
@@ -192,39 +157,59 @@ async function fetchItem(itemID: number) {
   }
   let rebuilt = false;
   if (readerVersion !== READER_VERSION) {
-    states.set(itemID, { status: "rendering_pages", message: "读取原始 PDF" });
-    const pdf = await originalPDF(item, id, dir);
-    const pages = await renderPaperPDF(pdf, (page, total) =>
-      states.set(itemID, {
-        status: "rendering_pages",
-        message: page + " / " + total,
-      }),
-    );
-    if (!alive) return;
-    await IOUtils.makeDirectory(PathUtils.join(dir, "_ash-pages"), {
-      createAncestors: true,
-      ignoreExisting: true,
-    });
-    const records = [];
-    for (const page of pages) {
-      const path = "page-" + String(page.number).padStart(4, "0") + ".png";
-      const binary = atob(page.dataURL.split(",")[1]),
-        bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-      await IOUtils.write(PathUtils.join(dir, "_ash-pages", path), bytes);
-      records.push({
-        number: page.number,
-        width: page.width,
-        height: page.height,
+    const files = [];
+    for (const path of ready.files)
+      files.push({
         path,
+        bytes: await IOUtils.read(PathUtils.join(dir, ...path.split("/"))),
       });
+    const result = prepareFiles(files, ready.mainFile);
+    const previews: Record<string, ImagePreview> = {};
+    try {
+      Object.assign(
+        previews,
+        JSON.parse(
+          await IOUtils.readUTF8(
+            PathUtils.join(dir, "_ash-figure-previews.json"),
+          ),
+        ),
+      );
+    } catch {
+      /* no valid preview cache */
+    }
+    const paths = [
+      ...new Set(
+        result.figures.flatMap((f) =>
+          f.images.map((i) => i.path).filter((p): p is string => !!p),
+        ),
+      ),
+    ];
+    const pdfs = paths.filter((path) => /\.pdf$/i.test(path));
+    for (const [index, path] of pdfs.entries()) {
+      states.set(itemID, {
+        status: "rendering_figures",
+        message: index + 1 + " / " + pdfs.length + " · " + path,
+      });
+      if (!/^data:image\/png;base64,/.test(previews[path]?.dataURL || "")) {
+        try {
+          previews[path] = await renderSourcePDF(
+            files.find((f) => f.path === path)!.bytes,
+          );
+          await IOUtils.writeUTF8(
+            PathUtils.join(dir, "_ash-figure-previews.json"),
+            JSON.stringify(previews),
+          );
+        } catch (error) {
+          throw new Error(
+            "figure-preview-failed: " + path + " · " + errorCode(error),
+          );
+        }
+      }
+      if (!alive) return;
     }
     await IOUtils.writeUTF8(
       PathUtils.join(dir, "_ash-reading.html"),
-      paperHTML(item.getDisplayTitle(), id, pages),
-    );
-    await IOUtils.writeUTF8(
-      PathUtils.join(dir, "_ash-pages.json"),
-      JSON.stringify({ arxivID: id, pages: records }),
+      sourceHTML(item.getDisplayTitle(), id, result, previews),
     );
     rebuilt = true;
   }
@@ -233,10 +218,10 @@ async function fetchItem(itemID: number) {
     await addAttachment(
       item,
       PathUtils.join(dir, "_ash-reading.html"),
-      "arXiv PDF 逐页阅读版 · " + id,
+      "arXiv TeX 阅读版 · " + id,
       "text/html",
       rebuilt,
-      ["arXiv TeX 阅读版 · " + id, "arXiv TeX 源码查看版 · " + id],
+      ["arXiv PDF 逐页阅读版 · " + id, "arXiv TeX 源码查看版 · " + id],
     );
   if (await IOUtils.exists(PathUtils.join(dir, "_ash-original-source.bin"))) {
     const bytes = await IOUtils.read(
